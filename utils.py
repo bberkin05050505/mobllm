@@ -9,7 +9,7 @@ from collections.abc import Callable
 from typing import Tuple, List, Dict, Any
 
 from sklearn.metrics import mean_squared_error, r2_score
-from models import LLaVaModelHF, HuggingFaceModel, OpenAIModel, KoboldModel, GroqOpenAIModel
+from models import LLaVaModelHF, HuggingFaceModel, OpenAIModel, KoboldModel
 
 import sympy
 from sympy.parsing.sympy_parser import parse_expr
@@ -51,8 +51,6 @@ def load_model(model_name: str, device: device, dtype: dtype, cache_dir: str = N
         model = OpenAIModel(model_name, device, dtype, cache_dir, **model_args)
     elif 'kobold' in model_name:
         model = KoboldModel(model_name, device, dtype, **model_args)
-    elif 'groq' in model_name:
-        model = GroqOpenAIModel(model_name, device, dtype, **model_args)
     else:
         model = HuggingFaceModel(model_name, device, dtype, cache_dir, **model_args)
 
@@ -214,14 +212,13 @@ def split_points(points: np.ndarray, test_fraction: float, split_strategy: str =
 
     return train_points, test_points
 
-def array_to_string(points: np.ndarray, num_digits: int) -> str:
+def array_to_string(points: np.ndarray) -> str:
     """
     Converts a numpy array of points to a string.
 
     Parameters
     ----------
     points -> the numpy array of points to convert.
-    num_digits -> number of digits to include in the string.
 
     Returns
     -------
@@ -230,7 +227,7 @@ def array_to_string(points: np.ndarray, num_digits: int) -> str:
     points = points.tolist()
     points_str = ""
     for point in points:
-        point_str = ", ".join([str(np.round(x, num_digits)) for x in point])
+        point_str = ", ".join([str(np.round(x, 2)) for x in point])
         point_str = f"({point_str})"
         points_str += point_str + ", "
 

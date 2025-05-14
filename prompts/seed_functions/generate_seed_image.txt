@@ -16,5 +16,6 @@ The functions should all begin with the indicators "f1 = ", "f2 = "... Only writ
 Your task is to combine an arbitrary number of these basic blocks to create a complex expression. Don't be afraid to be creative and experiment! The functions should be as complex as possible, combining many different operations. Variety is key!
 
 Points: {points}
+<image>
 
 Functions:

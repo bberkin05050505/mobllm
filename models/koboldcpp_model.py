@@ -1,4 +1,11 @@
+import os
+#import fcntl
+import utils
 import requests
+import json
+
+
+from transformers import AutoTokenizer, AutoModelForCausalLM
 
 class KoboldModel(object):
     def __init__(self, model_name, device, dtype, **kwargs):
@@ -41,14 +48,8 @@ class KoboldModel(object):
             "prompt": prompt,
             "max_length": max_new_tokens,
             "temperature": temperature,
-            "top_k": self.top_k,
-            "top_p": self.top_p,
         }
         
         response = self.call_kobold_api(generate_endpoint, "POST", payload) 
-        # One can look into response["results"][0]["finish_reason"] to see if the model stopped due to the stop sequence ("stop"),
-        # or due to hitting the maximum context length ("length"). If needed, the model can be re-prompted with the output text
-        # concatenated to the original text to keep generating more of the same response, even after hitting the max context length
-        # limit.
         output = response["results"][0]["text"]
         return output

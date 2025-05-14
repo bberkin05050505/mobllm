@@ -16,15 +16,13 @@ import utils
 
 from transformers import set_seed
 from omegaconf import OmegaConf, DictConfig, listconfig
-
+from sklearn.metrics import r2_score
 
 from plotter import Plotter
 from optimizer import Optimizer
 from current_functions import CurrentFunctions
 from scorers import BasicScorer, MinMaxScorer, ComplexityScorer
 from mloggers import ConsoleLogger, FileLogger, MultiLogger, LogLevel
-from ed import ED
-from sr import SR
 
 from typing import Dict, Tuple, List, Any
 from collections.abc import Callable
@@ -36,23 +34,15 @@ class Workspace(object):
     """
     def __init__(self, cfg: DictConfig) -> None:
         self.cfg = cfg
-        self.allowed_exp_types = cfg.allowed_exp_types
         
         # Output setup
         self.root_dir = cfg.get("root", os.getcwd())
         self.output_dir = cfg.get("output_dir", "output")
         model_folder_name = cfg.model.name.strip()
-
-        # Raise an exception if the experiment type is wrong. This is for organization purposes; experiment results are saved into folders
-        # associated with the experiment types. 
-        self.exp_type = cfg.initialization.exp_type
-        if self.exp_type not in self.allowed_exp_types:
-            raise Exception(f"Wrong experiment type {self.exp_type}!")
-        
         if "/" in model_folder_name:
             model_folder_name = model_folder_name.split("/")[-1]
         experiment_folder_name = os.path.join(cfg.experiment.function.group, cfg.experiment.function.name) if hasattr(cfg.experiment.function, "group") else cfg.experiment.function.name
-        self.output_path = os.path.join(self.root_dir, self.output_dir, experiment_folder_name, model_folder_name, self.exp_type, datetime.datetime.now().strftime("%Y%m%d-%H%M%S") + "/")
+        self.output_path = os.path.join(self.root_dir, self.output_dir, experiment_folder_name, model_folder_name, datetime.datetime.now().strftime("%Y%m%d-%H%M%S") + "/")
         while os.path.exists(self.output_path):
             self.output_path = os.path.join(self.root_dir, self.output_dir, experiment_folder_name, model_folder_name, datetime.datetime.now().strftime("%Y%m%d-%H%M%S") + "-" + str(np.random.randint(0, 1000)) + "/")
         os.makedirs(self.output_path)
@@ -83,18 +73,15 @@ class Workspace(object):
         
         # RNG setup
         if not hasattr(cfg, "seed") or cfg.seed is None or cfg.seed == -1:
-            random_seed = int(time.time() * 1e6) % (2**32)
-            if not self.cfg.random_seed_each_run:
-                self.cfg.seed = random_seed
-            self.logger.info(f"Seed not specified, using random seed: {random_seed}.")
+            self.cfg.seed = np.random.randint(0, np.iinfo(np.int32).max)
+            self.logger.info(f"Seed not specified, using random seed: {self.cfg.seed}.")
         else:
-            random_seed = self.cfg.seed
-            self.logger.info(f"Using seed: {random_seed}.")
+            self.logger.info(f"Using seed: {self.cfg.seed}.")
 
-        np.random.seed(random_seed)
-        torch.manual_seed(random_seed)
-        torch.cuda.manual_seed_all(random_seed) if torch.cuda.is_available() else None
-        set_seed(random_seed)
+        np.random.seed(self.cfg.seed)
+        torch.manual_seed(self.cfg.seed)
+        torch.cuda.manual_seed_all(self.cfg.seed) if torch.cuda.is_available() else None
+        set_seed(self.cfg.seed)
 
         if torch.cuda.is_available():
             torch.cuda.init()
@@ -126,54 +113,15 @@ class Workspace(object):
         self.data_folder = cfg.experiment.function.train_points.get("data_folder", None)
         self.data_folder = os.path.join(self.root_dir, self.data_folder) if self.data_folder is not None else None
 
-        self.train_domain_d = cfg.ED.train_domain_d
-        self.min_train_points = cfg.ED.train_domain_d[0]
-        self.max_train_points = cfg.ED.train_domain_d[1]
-        self.num_init_pts_k = cfg.initialization.num_init_pts_k
-        self.xs_noise_std = cfg.experiment.function.train_points.xs_noise_std
-        self.ys_noise_std = cfg.experiment.function.train_points.ys_noise_std
-
-        self.logger.info(f"Randomly sampled {self.num_init_pts_k} initial points.")
-
-        self.test_domain_d = cfg.initialization.test_domain_d
-        self.min_test_points = cfg.initialization.test_domain_d[0]
-        self.max_test_points = cfg.initialization.test_domain_d[1]
-        self.num_test_pts_m = cfg.initialization.num_test_pts_m
-
-        factor = (self.max_test_points - self.min_test_points) / (self.max_train_points - self.min_train_points)
-        self.num_extended_test_pts = int(self.num_test_pts_m * factor)
-            
-        self.logger.info(f"Randomly sampled {self.num_test_pts_m} train points on the dense grid.")
-        self.logger.info(f"Randomly sampled {self.num_extended_test_pts} test points.")
-
-        self.num_variables = cfg.experiment.function.num_variables
-        self.num_digits = cfg.initialization.num_data_digits
-
-        self.r2_tolerance = cfg.initialization.epsilon_r
-        self.c_tolerance = cfg.initialization.epsilon_c
-        self.exp_budget_n = cfg.ED.exp_budget_n
-    
-        self.checkpoints = cfg.checkpoints
-
-        self.true_function_name = cfg.experiment.function.test_function
-        self.true_function = utils.string_to_function(self.true_function_name, self.num_variables)
-
-        # Points setup
         if cfg.experiment.function.train_points.generate_points:
-            add_extremes = cfg.experiment.function.train_points.add_extremes if hasattr(cfg.experiment.function.train_points, "add_extremes") else False
-            random = cfg.experiment.function.train_points.random if hasattr(cfg.experiment.function.train_points, "random") else False
-            self.train_points = self.generate_points(self.true_function, self.min_train_points, self.max_train_points, self.num_init_pts_k, xs_noise_std=self.xs_noise_std, ys_noise_std=self.ys_noise_std, random_points=random, add_extremes=add_extremes)
-            self.train_points = utils.string_to_array(self.train_points)
-            np.save(os.path.join(self.output_path, "train_points.npy"), self.train_points)
-
-            self.R2_dense_train_points = self.generate_points(self.true_function, self.min_train_points, self.max_train_points, self.num_test_pts_m, xs_noise_std=self.xs_noise_std, ys_noise_std=self.ys_noise_std, random_points=False, add_extremes=add_extremes)
-            self.R2_dense_train_points = utils.string_to_array(self.R2_dense_train_points)
-            np.save(os.path.join(self.output_path, "R2_dense_train_points.npy"), self.R2_dense_train_points)
-            
-            self.test_points = self.generate_points(self.true_function, self.min_test_points, self.max_test_points, self.num_extended_test_pts,random_points=False)
-            self.test_points = utils.string_to_array(self.test_points)
-            np.save(os.path.join(self.output_path, "test_points.npy"), self.test_points)
-
+            self.min_train_points = cfg.experiment.function.train_points.min_points
+            self.max_train_points = cfg.experiment.function.train_points.max_points
+            self.num_train_points = cfg.experiment.function.train_points.num_points
+            self.xs_noise_std = cfg.experiment.function.train_points.xs_noise_std
+            self.ys_noise_std = cfg.experiment.function.train_points.ys_noise_std
+            self.random_train_points = self.cfg.experiment.function.train_points.random_points \
+                if hasattr(self.cfg.experiment.function.train_points, "random_points") \
+                and self.cfg.experiment.function.train_points.random_points else False
         else:
             assert self.data_folder is not None, "No data folder specified."
             assert os.path.exists(self.data_folder), f"Data folder {self.data_folder} does not exist."
@@ -182,73 +130,108 @@ class Workspace(object):
             
             train_points_file = os.path.join(self.data_folder, 'train_points.npy')
             self.train_points = utils.load_points(train_points_file)
+            self.num_train_points = len(self.train_points)
+            self.min_train_points = np.min(self.train_points)
+            self.max_train_points = np.max(self.train_points)
             self.logger.info(f"Loaded train points from {train_points_file}.")
-
-            R2_dense_train_points_file = os.path.join(self.data_folder, 'R2_dense_train_points.npy')
-            self.R2_dense_train_points = utils.load_points(R2_dense_train_points_file)
-            self.logger.info(f"Loaded R2 dense train points from {R2_dense_train_points_file}.")
             
             test_points_file = os.path.join(self.data_folder, 'test_points.npy')
             self.test_points = utils.load_points(test_points_file)
+            self.num_test_points = len(self.test_points)
+            self.min_test_points = np.min(self.test_points)
+            self.max_test_points = np.max(self.test_points)
             self.logger.info(f"Loaded test points from {test_points_file}.")
-            
-        self.num_train_points = len(self.train_points)
-        self.num_test_points = len(self.test_points)
 
-        self.logger.info(f"Train points: {utils.array_to_string(self.train_points, self.num_digits)}.")
+        self.tolerance = cfg.experiment.function.tolerance
+        self.num_variables = cfg.experiment.function.num_variables
+        if self.num_variables > 2 and self.visual_model:
+            self.logger.error("Visual models only support up to 2 variables.")
+            exit(1)
+        
+        self.iterations = cfg.experiment.function.iterations
+        self.max_retries = cfg.max_retries
+        self.force_valid = cfg.force_valid
+        self.force_unique = cfg.force_unique
+        self.checkpoints = cfg.checkpoints
+
+        if "test_function" not in cfg.experiment.function:
+            self.logger.info("Test function is not known.")
+            self.test_function = None
+        else:
+            self.test_function_name = cfg.experiment.function.test_function
+            self.test_function = utils.string_to_function(self.test_function_name, self.num_variables)
+
+        # Points setup
+        if cfg.experiment.function.train_points.generate_points:
+            add_extremes = cfg.experiment.function.train_points.add_extremes if hasattr(cfg.experiment.function.train_points, "add_extremes") else False
+            self.train_points = self.generate_points(self.test_function, self.min_train_points, self.max_train_points, self.num_train_points,
+                                                                                xs_noise_std=self.xs_noise_std, ys_noise_std=self.ys_noise_std, 
+                                                                                random_points=self.random_train_points, save_fig=True, add_extremes=add_extremes)
+            np.save(os.path.join(self.output_path, "train_points.npy"), self.train_points)
+
+            self.min_test_points = cfg.experiment.function.test_points.min_points if hasattr(cfg.experiment.function.test_points, "min_points") else self.min_train_points
+            self.max_test_points = cfg.experiment.function.test_points.max_points if hasattr(cfg.experiment.function.test_points, "max_points") else self.max_train_points
+            self.num_test_points = cfg.experiment.function.test_points.num_points
+            self.test_points = self.generate_points(self.test_function, self.min_test_points, self.max_test_points, self.num_test_points, random_points=False, save_fig=False)
+            np.save(os.path.join(self.output_path, "test_points.npy"), self.test_points)
+        
+        if cfg.experiment.get("normalize_points", False):
+            self.train_points = utils.normalize_points(self.train_points, cfg.experiment.normalize_method, cfg.experiment.normalize_percentile)
+            self.logger.info(f"Normalized train points: {self.train_points}.")
+        
+        self.logger.info(f"Train points: {utils.array_to_string(self.train_points)}.")
         if self.num_test_points > 100:
             self.logger.info(f"Not logging test points as there are more than 100 ({self.num_test_points}).")
         else:
-            self.logger.info(f"Test points: {utils.array_to_string(self.test_points, self.num_digits)}.")
+            self.logger.info(f"Test points: {utils.array_to_string(self.test_points)}.")
 
         # Optimizer settings
         self.optimizer = Optimizer(cfg, self.train_points, self.logger)
 
         # Plotter setup
+        if self.num_variables > 2:
+            self.logger.warning("Plotter will not plot points and animation as there are more than 2 variables.")
         self.save_frames = cfg.plotter.save_frames if hasattr(cfg.plotter, "save_frames") else False
         if self.save_frames:
             os.makedirs(self.output_path + "frames/")
         
         self.save_video = cfg.plotter.save_video if hasattr(cfg.plotter, "save_video") else True
         self.save_video = False if self.num_variables > 2 else self.save_video
-     
+        if self.save_video:
+            plt.rcParams.update({'figure.max_open_warning': cfg.experiment.function.iterations + 5})
         self.plotter = Plotter(cfg, self.train_points, self.test_points, self.output_path)
         self.plotter.plot_points(save_fig=True, plot_test=False)
 
-        # Prompts
+        # Base prompt
         self.prompts_path = os.path.join(self.root_dir, cfg.prompts_path)
-        self.num_to_sample_b = cfg.SR.num_to_sample_b
-        self.num_best_funcs_c = cfg.SR.num_best_funcs_c
+        self.prompt_size = cfg.model.base_prompt.prompt_size
+        with open(os.path.join(self.prompts_path, "OPRO", cfg.model.base_prompt.prompt), "r") as f:
+            self.base_prompt = f.read()
+            
+        self.prompt_points = utils.decimate_points(self.train_points, cfg.max_points_in_prompt)
+        self.prompt_points = utils.array_to_string(self.prompt_points)
+        if self.num_train_points > self.cfg.max_points_in_prompt:
+            self.logger.info(f"Found {self.num_train_points} train points, decimated to {cfg.max_points_in_prompt} for the prompt.")
+            self.logger.info(f"Prompt points: {self.prompt_points}.")
+            
+        self.base_prompt = self.base_prompt.format(points=self.prompt_points, num_variables=self.num_variables, 
+                                                    variables_list=[f"x{i+1}" for i in range(self.num_variables)], functions="{functions}")
 
-        # Base SR prompt
-        with open(os.path.join(self.prompts_path, cfg.prompt_folder, cfg.sr_prompt_name), "r") as f:
-            self.base_sr_prompt = f.read()
-            self.base_sr_prompt = self.base_sr_prompt.format(points="{points}", num_best_funcs_c=self.num_best_funcs_c, 
-                                        functions="{functions}", num_to_sample_b=self.num_to_sample_b, num_variables=self.num_variables, 
-                                        variables_list=[f"x{i+1}" for i in range(self.num_variables)])
-
-        # Base ED prompt
-        with open(os.path.join(self.prompts_path, cfg.prompt_folder, cfg.ed_prompt_name), "r") as f:
-            self.base_ed_prompt = f.read()
-            self.base_ed_prompt = self.base_ed_prompt.format(budget_remaining="{budget_remaining}", num_init_pts_k=self.num_init_pts_k, 
-                                        prior_data=utils.array_to_string(self.train_points, self.num_digits), llm_sampled_data="{llm_sampled_data}", 
-                                        domain=self.train_domain_d)
-        
-        # Initial ED prompt
-        with open(os.path.join(self.prompts_path, cfg.prompt_folder, cfg.ed_initial_prompt_name), "r") as f:
-            self.initial_ed_prompt = f.read()
-            self.initial_ed_prompt = self.initial_ed_prompt.format(budget_remaining=self.exp_budget_n, num_init_pts_k=self.num_init_pts_k, 
-                                        prior_data=utils.array_to_string(self.train_points, self.num_digits), domain=self.train_domain_d)
-        
         # Model settings
         self.model_name = cfg.model.name
         self.model = None
-        self.input_img = None
-    
-        self.logger.info(f"Base SR Prompt: {self.base_sr_prompt} with input image {self.input_img}.")
-        self.logger.info(f"Base ED Prompt: {self.base_ed_prompt} with input image {self.input_img}.")
-        self.logger.info(f"Initial ED Prompt: {self.initial_ed_prompt} with input image {self.input_img}.")
 
+        self.visual_model = cfg.model.visual
+        if hasattr(cfg.model.base_prompt, "input_image"):
+            self.input_img = cfg.model.base_prompt.input_image
+            valid_inputs = ["points", "previous_guess", "best_guess", "all_guesses"]
+            if self.input_img not in valid_inputs:
+                self.logger.error(f"Input image {self.input_img} not supported. Valid inputs are {valid_inputs}.")
+                exit(1)
+        else:
+            self.input_img = None
+
+        self.logger.info(f"Base Prompt: {self.base_prompt} with input image {self.input_img}.")
         self.tokenizer_pad = cfg.model.tokenizer_pad
         self.tokenizer_padding_side = cfg.model.tokenizer_padding_side
 
@@ -272,11 +255,10 @@ class Workspace(object):
             "min_new_tokens": 0,
             "tokenizer_pad": self.tokenizer_pad,
             "tokenizer_padding_side": self.tokenizer_padding_side,
-            "seed": random_seed,
+            "seed": self.cfg.seed,
             "api_key_path": os.path.join(self.root_dir, cfg.model.api_key_path) if hasattr(cfg.model, "api_key_path") else None,
             "organization_id_path": os.path.join(self.root_dir, cfg.model.organization_id_path) if hasattr(cfg.model, "organization_id_path") else None,
         }
-
         if torch.cuda.is_available() and 'A100' in torch.cuda.get_device_name(0):
             model_args['attn_implementation'] = 'flash_attention_2'
             model_args['use_flash_attn'] = True
@@ -301,7 +283,6 @@ class Workspace(object):
                 alternative = True
                 self.logger.info("Using alternative complexity scorer.")
             self.scorer = ComplexityScorer(self.train_points, rounding=cfg.experiment.scorer.rounding, scientific=cfg.experiment.scorer.scientific, lam=cfg['experiment']['scorer']['lambda'], max_nodes=cfg.experiment.scorer.max_nodes, alternative=alternative)
-            self.dense_train_scorer = ComplexityScorer(self.R2_dense_train_points, rounding=cfg.experiment.scorer.rounding, scientific=cfg.experiment.scorer.scientific, lam=cfg['experiment']['scorer']['lambda'], max_nodes=cfg.experiment.scorer.max_nodes, alternative=alternative)
             self.test_scorer = ComplexityScorer(self.test_points, rounding=cfg.experiment.scorer.rounding, scientific=cfg.experiment.scorer.scientific, lam=cfg['experiment']['scorer']['lambda'], max_nodes=cfg.experiment.scorer.max_nodes, alternative=alternative)
         else:
             self.logger.error(f"Scorer {cfg.experiment.scorer.name} not supported.")
@@ -309,34 +290,32 @@ class Workspace(object):
 
         # Seed functions
         self.seed_functions = {}
-        min_seed_functions = max(5, self.num_to_sample_b) # If the prompt size is small (e.g. 1) we still want to generate a few seed functions to avoid getting stuck
+        min_seed_functions = max(5, self.prompt_size) # If the prompt size is small (e.g. 1) we still want to generate a few seed functions to avoid getting stuck
         gen_time = 0
         if cfg.experiment.generate_seed_functions:
             self.seed_functions, gen_time = self.generate_seed_functions()
-            if (len(self.seed_functions) < min_seed_functions):
-                self.logger.warn(f"Could not generate {min_seed_functions} seed functions. Generated {len(self.seed_functions)} seed functions.")
+            assert len(self.seed_functions) >= min_seed_functions, f"Could not generate {min_seed_functions} seed functions. Generated {len(self.seed_functions)} seed functions."
         else:
             self.seed_functions = {name: utils.string_to_function(name, self.num_variables) for name in cfg.experiment.seed_functions.functions}
             self.logger.info(f"Loaded seed functions: {self.seed_functions}.")
-        self.current_functions = CurrentFunctions(self.seed_functions, self.scorer, self.optimizer, self.num_best_funcs_c, self.logger, self.num_variables)
+        self.current_functions = CurrentFunctions(self.seed_functions, self.scorer, self.optimizer, self.prompt_size, self.logger, self.num_variables)
         self.logger.info(f"Current functions: {self.current_functions.functions}.")
         self.logger.info(f"Current scores: {self.current_functions.scores}.")
 
-        if len(self.current_functions.functions) < self.num_to_sample_b:
-            self.logger.warning(f"Could not generate {self.num_to_sample_b} seed functions. Generated {len(self.current_functions.functions)} seed functions.")
+        if len(self.current_functions.functions) < self.prompt_size:
+            self.logger.warning(f"Could not generate {self.prompt_size} seed functions. Generated {len(self.current_functions.functions)} seed functions.")
             if len(self.current_functions.functions) == 0:
-                self.logger.error("No seed functions generated. Raising exception.")
-                raise Exception("No seed functions generated.")
+                self.logger.error("No seed functions generated. Exiting.")
+                exit(1)
         else:
-            self.logger.info(f"Succesfully generated {len(self.current_functions.functions)} seed functions in {gen_time} seconds.")
+            self.logger.info(f"Succesfully generated {self.prompt_size} seed functions in {gen_time} seconds.")
 
         # Results json
         self.results = {
             "experiment_name": self.cfg.experiment.function.name,
-            "seed": random_seed,
-            "train_points": utils.array_to_string(self.train_points, self.num_digits),
-            "R2_dense_train_points": utils.array_to_string(self.R2_dense_train_points, self.num_digits),
-            "test_points": utils.array_to_string(self.test_points, self.num_digits),
+            "seed": self.cfg.seed,
+            "train_points": utils.array_to_string(self.train_points),
+            "test_points": utils.array_to_string(self.test_points),
             "best_expr": "",
             "best_function": "",
             "scores": [],
@@ -365,12 +344,6 @@ class Workspace(object):
         # Save config
         with open(self.output_path + "config.yaml", "w") as f:
             OmegaConf.save(self.cfg, f)
-
-        # Generate the ED and SR phases
-        self.ED = ED(self.cfg, self.logger, utils.array_to_string(self.train_points, self.num_digits))
-        self.SR = SR(self.cfg, self.logger, self.current_functions, self.base_sr_prompt, self.temperature_scheduler,
-                     self.results, self.model, self.optimizer, self.scorer, self.test_points, self.plotter, self.true_function,
-                     self.output_path)
 
     def generate_points(self, function: Callable, min_points: float, max_points: float, num: int, xs_noise_std: float = 0, ys_noise_std: float = 0, 
                         random_points: bool = False, add_extremes: bool = True) -> str:
@@ -460,7 +433,7 @@ class Workspace(object):
                 new_points = self.generate_points(function, min_value, max_value, num-len(points), xs_noise_std, ys_noise_std, random_points, add_extremes=False)
                 points = np.concatenate((points, new_points))
 
-        return utils.array_to_string(points, self.num_digits)
+        return points
     
     def generate_seed_functions(self) -> Tuple[Dict[str, Any], float]:
         """
@@ -486,8 +459,7 @@ class Workspace(object):
             prompt = f.read()
         img_path = os.path.join(self.output_path, "points.png") if self.input_img else None
 
-        prompt = prompt.format(points=utils.array_to_string(self.train_points, self.num_digits), num_variables=self.num_variables, 
-                               variables_list=[f"x{i+1}" for i in range(self.num_variables)])
+        prompt = prompt.format(points=self.prompt_points, num_variables=self.num_variables, variables_list=[f"x{i+1}" for i in range(self.num_variables)])
         self.logger.info("Prompt for seed functions generation:")
         self.logger.info(prompt)
         
@@ -527,55 +499,244 @@ class Workspace(object):
 
         self.logger.info(f"Generated seed functions: {seed_functions}.")
         return seed_functions, end_time - start_time
-    
-    def perform_checkpoint(self, iteration: int, main_timer_start: float) -> None:
+
+
+    def get_new_function(self, prompt: str) -> Tuple[List, bool]:
         """
-        Performs checkpoint operations.
+        Generates a new function from the model, given a prompt.
+
+        Parameters
+        ----------
+        prompt -> the prompt to use for the model.
+
+        Returns
+        -------
+        functions -> the new functions generated by the model as a string.
+        found_valid -> whether a valid function was found.
         """
-        self.logger.info(f"Checkpoint {iteration}. Saving results.")
-        results_checkpoint = copy.deepcopy(self.results)
-        checkpoint_timer_end = time.perf_counter()
-        results_checkpoint["times"]["total"] = checkpoint_timer_end - main_timer_start
+        img = None
+        if self.visual_model:
+            if self.input_img == "points":
+                img = os.path.join(self.output_path, "points.png")
+            elif self.input_img == "previous_guess":
+                img = os.path.join(self.output_path, "frames", f"{self.results['iterations']-1}.png")
+            elif self.input_img == "best_guess":
+                fig, ax = self.plotter.plot_results(self.current_functions.get_best_function(return_coeff=False), self.test_function, plot_true=False)
+                fig.savefig(self.output_path + "best_guess.png")
+                plt.close(fig)
+                img = os.path.join(self.output_path, "best_guess.png")
+            elif self.input_img == "all_guesses":
+                os.makedirs(self.output_path + "prompt_input/")
+                path = os.path.join(self.output_path, "prompt_input/")
+                img = []
+                functions = self.current_functions.get_prompt_functions()
+                for expr, _ in functions:
+                    try:
+                        function = self.current_functions.functions[expr]
+                        fig, ax = self.plotter.plot_results(function, self.test_function, plot_true=False, label="Function: " + str(function))
+                        function_string = str(expr)
+                        fig.suptitle("Plot of " + function_string)
+                        fig.text(0.5, 0.90, "Error: " + str(self.current_functions.norm_scores[expr]), ha='center')
+                        file_name = function_string.replace(" ", "_").replace("/", "div")
+                        fig.savefig(os.path.join(path, f"{file_name}.png"))
+                        plt.close(fig)
+                        img.append(os.path.join(path, f"{file_name}.png"))
+                    except Exception as e:
+                        self.logger.warning(f"Could not plot function {function}.")
+                        self.logger.warning(str(e))
+                        pass
+
+        new_output = self.model.generate(prompt, return_prompt=False, image_files=img, temperature=self.temperature)
+        self.logger.info("Prompt: " + prompt)
+        self.logger.info("Model output: " + new_output)
+
+        # Clean up images
+        if self.visual_model and self.input_img == "best_guess":
+            os.remove(self.output_path + "best_guess.png")
+        elif self.visual_model and self.input_img == "all_guesses":
+            for file in os.listdir(path):
+                os.remove(os.path.join(path, file))
+            os.rmdir(path)
+
+        functions = []
+        lines = new_output.split("\n")
+        for line in lines:
+            if "x" not in line:
+                    self.logger.info(f"Skipping line {line} as it does not contain 'x' and is likely not a function.")  
+                    continue
+            if "Error" in line:
+                self.logger.info(f"Skipping line {line} as it contains 'Error'.")
+                continue
+            line = utils.clean_function(line)
+            if line == "":
+                continue
+            self.logger.info("Cleaned line: " + line + ".")
+            try:
+                valid, reason = utils.is_valid_function(line, self.current_functions, self.num_variables)
+                self.logger.info(f"Valid: {valid}. Reason: {reason}.")
+                if valid:
+                    functions.append(line)
+                elif not valid and reason == "Function already in prompt." and not self.force_unique:
+                    functions.append(line)
+            except Exception as e:
+                self.logger.warning(f"Could not parse line {line}.")
+                self.logger.warning(str(e))
+                pass
         
-        best_expr = self.current_functions.get_best_function(return_coeff=True)
-        best_function = self.current_functions.get_best_function(return_coeff=False)
-        test_score = self.test_scorer.score(best_function)
-        results_checkpoint["test_score"] = test_score
-        results_checkpoint["best_function"] = str(best_function)
-        results_checkpoint["best_expr"] = str(best_expr)
-        r2_train, r2_test, r2_all = self.SR.get_R2_scores(best_function, self.all_train_points, self.test_points)
-        results_checkpoint["r2_train"] = r2_train
-        results_checkpoint["r2_test"] = r2_test
-        results_checkpoint["r2_all"] = r2_all
-        results_checkpoint["final_complexity"] = utils.count_nodes(best_function)
-        with open(self.output_path + f"results_checkpoint_{iteration}.json", "w") as f:
-            json.dump(results_checkpoint, f)
-        self.logger.info(f"Checkpoint {iteration} saved.")
+        found_valid = False
+        if len(functions) == 0:
+            self.logger.warning("Could not find a valid function in the output. Using the last function in the output.")
+            functions = [self.current_functions.get_best_function()]
+        else:
+            found_valid = True
+            functions = [utils.string_to_function(function, self.num_variables) for function in functions]
+            self.logger.info(f"Found functions: {functions}.")
 
+        return functions, found_valid
 
-    def run(self) -> int:
+    def get_new_function_and_score(self, prompt: str) -> Tuple[Any, Any, float]:
+        """
+        Generates a new function from the model, given a prompt, and scores it if it is valid.
+
+        Parameters
+        ----------
+        prompt -> the prompt to use for the model.
+
+        Returns
+        -------
+        expression -> the coefficient form of the function.
+        function -> function with the optimized coefficients.
+        score -> the score of the function.
+        """
+        valid = False
+        start_time = time.perf_counter()
+        for i in range(self.max_retries):
+            self.logger.info(f"Attempt {i+1} of {self.max_retries} to find a valid function.")
+            functions, valid = self.get_new_function(prompt)
+            if valid and len(functions) > 1:
+                self.logger.info(f"Found {len(functions)} functions in the output.")
+                break
+            else:
+                self.logger.info(f"Could not find a valid function in the output. Trying again.")
+
+        self.results["tries_per_iteration"].append(i+1)
+        self.results["times"]["generation_per_iteration"].append(time.perf_counter() - start_time)
+
+        if not valid:
+            if self.force_valid:
+                self.logger.error(f"Could not find a valid function after {self.max_retries} tries. Exiting.")
+                exit(1)
+            else:
+                best_expr = self.current_functions.get_best_function(return_coeff=True)
+                best_function = self.current_functions.functions[best_expr]
+                best_score = self.current_functions.scores[best_expr]
+                self.logger.warning(f"Could not find a valid function after {self.max_retries} tries. Using {best_function}.")
+        else:
+            best_score = np.inf
+            start_time = time.perf_counter()
+            for function in functions:
+                if not self.current_functions.func_in_list(function):
+                    self.results["num_unique"] += 1
+                self.results["generations_per_iteration"].append(len(functions))
+                try:
+                    opt_function, exp = self.optimizer.optimize(function, return_coeff=True)
+                    score = self.scorer.score(opt_function)
+                    self.logger.info(f"New function: {str(opt_function)}. Score: {score}.")
+                    if score < best_score:
+                        best_score = score
+                        best_function = opt_function
+                        best_expr = exp
+                except Exception as e:
+                    self.logger.warning(f"Could not optimize function {function}. {e}")
+                    pass
+
+            self.results["times"]["optimization_per_iteration"].append(time.perf_counter() - start_time)
+            self.logger.info(f"Optimizer time: {time.perf_counter() - start_time}.")
+            if best_score == np.inf:
+                self.logger.warning(f"No functions scored below inf. Using the best function in the prompt.")
+                best_expr = self.current_functions.get_best_function(return_coeff=True)
+                best_function = self.current_functions.functions[best_expr]
+                best_score = self.current_functions.scores[best_expr]
+            self.logger.info(f"Best function: {best_function}. Score: {best_score}.")
+
+        self.logger.info(f"Finished get new function and score. Best function: {best_function}. Score: {best_score}.")
+        return best_expr, best_function, best_score
+    
+    def get_R2_scores(self, function: Any) -> Tuple[float, float, float]:
+        """
+        Computes the R2 scores for the train and test sets given a function, removing the 5% worst predictions.
+        
+        Parameters
+        ----------
+        function -> the function to evaluate.
+        
+        Returns
+        -------
+        r2_train -> the R2 score for the train set.
+        r2_test -> the R2 score for the test set.
+        r2_all -> the R2 score for all points.
+        """
+        
+        y_true_train = self.train_points[:, -1]
+        y_true_test = self.test_points[:, -1]
+        
+        def compute_predictions(function, points, num_variables):
+            y_pred = utils.eval_function(function, points[:, 0:-1], num_variables)
+            
+            # Compute a boolean mask of the 5% worst predictions
+            worst_indices = np.argsort(np.abs(y_pred - points[:, -1]))[-int(len(points) * 0.05):]
+            mask = np.zeros(len(points), dtype=bool)
+            mask[worst_indices] = True
+            
+            return y_pred[~mask], mask
+        
+        try:
+            y_pred_train, y_train_mask = compute_predictions(function, self.train_points, self.num_variables)
+            y_pred_test, y_test_mask = compute_predictions(function, self.test_points, self.num_variables)
+            
+            y_true_train = y_true_train[~y_train_mask]
+            y_true_test = y_true_test[~y_test_mask]
+            
+            assert len(y_true_train) == len(y_pred_train), f"Length of true train points ({len(y_true_train)}) does not match length of predicted train points ({len(y_pred_train)})."
+            assert len(y_true_test) == len(y_pred_test), f"Length of true test points ({len(y_true_test)}) does not match length of predicted test points ({len(y_pred_test)})."
+            
+        except Exception as e:
+            self.logger.warning(f"Could not evaluate function {function}. {e}")
+            return np.nan, np.nan, np.nan
+        try:
+            r2_train = r2_score(y_true_train, y_pred_train)
+        except Exception as e:
+            self.logger.warning(f"Could not calculate R2 score for train set. {e}")
+            r2_train = np.nan
+        try:
+            r2_test = r2_score(y_true_test, y_pred_test)
+        except Exception as e: 
+            self.logger.warning(f"Could not calculate R2 score for test set. {e}")
+            r2_test = np.nan
+        try:
+            r2_all = r2_score(np.concatenate((y_true_train, y_true_test)), np.concatenate((y_pred_train, y_pred_test)))
+        except Exception as e:
+            self.logger.warning(f"Could not calculate R2 score for all points. {e}")
+            r2_all = np.nan
+
+        return r2_train, r2_test, r2_all
+
+    def run(self) -> None:
         """
         Runs the main experiment, iterating and generating new functions until the tolerance is reached.
-
-        Returns 0 if the experiment fails, 1 otherwise.
         """
         main_timer_start = time.perf_counter()
         if self.save_video:
             frames = []
 
-        # Check if one of the generated seed functions is already below the cost tolerance
-        # Here, "score" is actually the cost value 
+        # Check if one of the generated seed functions is already below the tolerance
         best_expr = self.current_functions.get_best_function(return_coeff=True)
         best_function = self.current_functions.get_best_function(return_coeff=False)
         score = self.current_functions.scores[best_expr]
-
-        if score <= self.c_tolerance:
-            self.all_train_points = utils.array_to_string(self.train_points, self.num_digits)
-
-            r2_train, r2_test, r2_all = self.SR.get_R2_scores(best_function, self.train_points, self.test_points)
-            r2_dense_train, _, _, = self.SR.get_R2_scores(best_function, self.R2_dense_train_points, self.test_points)
-
-            self.logger.info(f"The seed function {best_expr} is already below the C tolerance {self.c_tolerance}.")
+        r2_train, r2_test, r2_all = self.get_R2_scores(best_function)
+        
+        if r2_train >= self.tolerance:
+            self.logger.info(f"The seed function {best_expr} is already above the R2 tolerance {self.tolerance}.")
             self.logger.info(f"Best function: {best_function}. R2 (train): {r2_train}.")
 
             self.results["scores"].append(score) if score != np.inf else self.results["scores"].append("inf")
@@ -583,99 +744,113 @@ class Workspace(object):
             self.results["best_scores_normalized"].append(self.current_functions.norm_scores[best_expr])
             self.results["best_found_at"] = 0
             self.results["temperatures"].append(self.temperature)
-        
+            
             if self.save_video:
-                frame, ax = self.plotter.record_frame(best_function, best_function, r2_test, self.true_function, -1, plot_true=True)
+                frame, ax = self.plotter.record_frame(best_function, best_function, r2_test, self.test_function, -1, plot_true=True)
                 if self.save_frames:
-                    frame.savefig(self.output_path + "frames/" + f"{0}.png")
+                    frame.savefig(self.output_path + "frames/" + f"{i}.png")
                 frames.append(frame)
         else:
             # Start the main loop
-            budget_remaining = self.exp_budget_n
-            llm_sampled_data = ""
-            og_train_points = utils.array_to_string(self.train_points, self.num_digits)
+            prompt = self.current_functions.get_prompt(self.base_prompt)
+            for i in range(self.iterations):
+                start_time = time.perf_counter()
+                self.logger.info(f"Round {i+1}.")
+                self.logger.info(f"Scores: {self.current_functions.scores}.")
 
-            while budget_remaining > 0:
-                iteration = self.exp_budget_n - budget_remaining
+                # Handle temperature schedule
+                if self.temperature_scheduler is not None:
+                    self.temperature = self.temperature_scheduler.get_last_lr()[0]
+                    self.logger.info(f"Temperature: {self.temperature}.")
+                    self.results["temperatures"].append(self.temperature)
+                    self.temperature_scheduler.step()
 
-                # perform experimental design
-                proposed_design = self.ED.propose_random_design(iteration)
+                # Get new function and score
+                expr, function, score = self.get_new_function_and_score(prompt)
+                self.current_functions.add_function(expr, function)
+                best_expr = self.current_functions.get_best_function(return_coeff=True)
+                best_function = self.current_functions.functions[best_expr]
+
+                # Update results
+                if expr == best_expr:
+                    self.results["best_found_at"] = i+1
+                self.results["iterations"] = i+1
+                self.results["scores"].append(score) if score != np.inf else self.results["scores"].append("inf")
+                self.results["best_scores"].append(self.current_functions.scores[best_expr])
+                self.results["best_scores_normalized"].append(self.current_functions.norm_scores[best_expr])
+                self.results["times"]["iteration"].append(time.perf_counter() - start_time)
                 
-                # sample data accordingly and update train points and round to self.num_digits digits
-                # new_point is an np array of a float, so we first access it and then round
-                new_point_y = utils.eval_function(self.true_function, np.array([proposed_design]), self.num_variables)
-                new_point_y = round(new_point_y.item(), self.num_digits)
+                r2_train, r2_test, r2_all = self.get_R2_scores(function)
+                self.results["R2_trains"].append(r2_train)
+                self.results["R2_tests"].append(r2_test)
+                self.results["R2_alls"].append(r2_all)
 
-                if llm_sampled_data == "":
-                    llm_sampled_data = str((proposed_design, new_point_y))
-                else:
-                    llm_sampled_data = llm_sampled_data + ", " + str((proposed_design, new_point_y))
-                self.all_train_points = og_train_points + ", " + llm_sampled_data
-
-                # Update the training points to include the newly sampled points for everything they are used in
-                self.optimizer.points = utils.string_to_array(self.all_train_points)
-                self.scorer.points = utils.string_to_array(self.all_train_points)
-                self.plotter.train_points = utils.string_to_array(self.all_train_points)
-
-                # Don't forget to recompute scores with the newly sampled data point included before prompting the mode
-                self.current_functions.scores, self.current_functions.norm_scores = self.scorer.score_current_functions(self.current_functions.functions)
-
-                # Perform symbolic regression, optimization, compute cost and update results
-                best_expr, best_func, best_score = self.SR.propose_exp_and_get_score(self.all_train_points, iteration, frames)
-
-                budget_remaining -= 1
-
-                # Check if the true function has been found
-                if self.true_function is not None:
-                    if utils.func_equals(best_func, self.true_function, self.num_variables):
+                # Update video
+                if self.save_video:
+                    if not score == np.inf:
+                        frame, ax = self.plotter.record_frame(best_function, function, r2_test, self.test_function, i, plot_true=True)
+                        if self.save_frames:
+                            frame.savefig(self.output_path + "frames/" + f"{i}.png")
+                        frames.append(frame)
+                    else:
+                        self.logger.warning(f"Skipping frame {i} as the score is inf.")
+                
+                # Check if the tolerance is reached
+                if self.test_function is not None:
+                    if utils.func_equals(best_function, self.test_function, self.num_variables):
                         self.logger.info(f"Function is equivalent to the true function.")
                         self.results["equivalent"] = True
                         break
                 
-                # Check if the tolerance is reached
-                if best_score <= self.c_tolerance:
-                    self.logger.info(f"Found a function with cost (train) = {score} below the tolerance {self.c_tolerance}.")
+                if r2_train >= self.tolerance:
+                    self.logger.info(f"Found a function with R2 (train) = {r2_train} above the tolerance {self.tolerance}.")
                     break
+                prompt = self.current_functions.get_prompt(self.base_prompt)
                 
-                if iteration in self.checkpoints:
-                    self.perform_checkpoint(iteration, main_timer_start)
+                if i in self.checkpoints:
+                    self.logger.info(f"Checkpoint {i}. Saving results.")
+                    results_checkpoint = copy.deepcopy(self.results)
+                    checkpoint_timer_end = time.perf_counter()
+                    results_checkpoint["times"]["total"] = checkpoint_timer_end - main_timer_start
+                    
+                    best_expr = self.current_functions.get_best_function(return_coeff=True)
+                    best_function = self.current_functions.get_best_function(return_coeff=False)
+                    test_score = self.test_scorer.score(best_function)
+                    results_checkpoint["test_score"] = test_score
+                    results_checkpoint["best_function"] = str(best_function)
+                    results_checkpoint["best_expr"] = str(best_expr)
+                    r2_train, r2_test, r2_all = self.get_R2_scores(best_function)
+                    results_checkpoint["r2_train"] = r2_train
+                    results_checkpoint["r2_test"] = r2_test
+                    results_checkpoint["r2_all"] = r2_all
+                    results_checkpoint["final_complexity"] = utils.count_nodes(best_function)
+                    with open(self.output_path + f"results_checkpoint_{i}.json", "w") as f:
+                        json.dump(results_checkpoint, f)
+                    self.logger.info(f"Checkpoint {i} saved.")
 
-        # Save final results into a json
+        # Save final results
         main_timer_end = time.perf_counter()
         best_expr = self.current_functions.get_best_function(return_coeff=True)
         best_function = self.current_functions.get_best_function(return_coeff=False)
-        best_popt = self.current_functions.optimized_params[best_expr]
         test_score = self.test_scorer.score(best_function)
-        dense_training_score = self.dense_train_scorer.score(best_function)
-
-        # Save final figures and animations
-        if hasattr(self, "test_function_name") and self.true_function_name is not None:
-            self.logger.info(f"True function: {self.true_function_name}")
-
-        fig, ax = self.plotter.plot_results(best_function, self.true_function)
-        fig.savefig(self.output_path + "final.png")
-
-        if self.save_video and len(frames) > 0:
-            self.plotter.record_video(frames)
-
         self.logger.info(f"Test score: {test_score}.")
-        self.logger.info(f"Dense training score: {dense_training_score}.")
+
         self.logger.info(f"Best function: {best_function}. Score: {self.current_functions.scores[best_expr]} ({self.current_functions.norm_scores[best_expr]}).")
         
+        if hasattr(self, "test_function_name") and self.test_function_name is not None:
+            self.logger.info(f"True function: {self.test_function_name}")
+        fig, ax = self.plotter.plot_results(best_function, self.test_function)
+        fig.savefig(self.output_path + "final.png")
+
         self.results["best_function"] = str(best_function)
         self.results["best_expr"] = str(best_expr)
-        self.results["best_popt"] = str(best_popt)
         self.results["test_score"] = test_score
-        self.results["dense training score"] = dense_training_score
         self.results["times"]["total"] = main_timer_end - main_timer_start + self.results["times"]["seed_function_generation"]
         self.results["times"]["avg_generation"] = np.mean(self.results["times"]["generation_per_iteration"]) if len(self.results["times"]["generation_per_iteration"]) > 0 else 0
         self.results["times"]["avg_optimization"] = np.mean(self.results["times"]["optimization_per_iteration"]) if len(self.results["times"]["optimization_per_iteration"]) > 0 else 0
 
-
-        r2_train, r2_test, r2_all = self.SR.get_R2_scores(best_function, utils.string_to_array(self.all_train_points), self.test_points)
-        r2_dense_train, _, _, = self.SR.get_R2_scores(best_function, self.R2_dense_train_points, self.test_points)
+        r2_train, r2_test, r2_all = self.get_R2_scores(best_function)
         self.results["r2_train"] = r2_train
-        self.results["r2_dense_train"] = r2_dense_train
         self.results["r2_test"] = r2_test
         self.results["r2_all"] = r2_all
         self.logger.info(f"R2 train: {np.round(r2_train, 6)}. R2 test: {np.round(r2_test, 6)}. R2 all: {np.round(r2_all, 6)}.")
@@ -684,38 +859,18 @@ class Workspace(object):
         self.results["final_complexity"] = final_complexity
         self.logger.info(f"Number of nodes in final expression tree: {final_complexity}.")
 
-        r2_train_sucess = bool(r2_train >= self.r2_tolerance)
-        r2_dense_train_sucess = bool(r2_dense_train >= self.r2_tolerance)
-        r2_test_sucess = bool(r2_test >= self.r2_tolerance)
-        r2_all_sucess = bool(r2_all >= self.r2_tolerance)
-
-        self.results["r2_train_sucess"] = r2_train_sucess
-        self.results["r2_dense_)train_sucess"] = r2_dense_train_sucess
-        self.results["r2_test_sucess"] = r2_test_sucess
-        self.results["r2_all_sucess"] = r2_all_sucess
-
         with open(self.output_path + "results.json", "w") as f:
             json.dump(self.results, f)
 
-        return r2_dense_train_sucess
-        
+        if self.save_video and len(frames) > 0:
+            self.plotter.record_video(frames)
+
+
 @hydra.main(version_base=None, config_path="conf", config_name="config")
 def main(cfg: DictConfig) -> None:
-    success = 0
-    num_exps = cfg.initialization.num_exps_l
-    num_finished = 0
-    for _ in range(num_exps):
-        try:
-            print(f"Running experiment {_ + 1} of {num_exps}...")
-            workspace = Workspace(cfg)
-            success += workspace.run()
-            num_finished += 1
-        except Exception as e:
-            print(f"Experiment {_ + 1} failed. {e}")
-            continue
-    print(f"Success ratio: {success}/{num_exps}")
-    print(f"Number of experiments that completed without errors: {num_finished}/{num_exps}")
-    
+    workspace = Workspace(cfg)
+    workspace.run()
+
 def dump_profile():
     profiler.disable()
     job_id = utils.get_job_id()

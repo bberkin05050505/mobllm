@@ -133,7 +133,7 @@ class Optimizer(object):
         symbols = [symbols[:num_variables], *symbols[num_variables:]]
         return sympy.lambdify(symbols, exp, "numpy"), exp
     
-    def _run_curve_fit(self, f: Any, num_parameters: int, results: Any, done_event: Any, coefficients: Any, quiet: bool = True, random_p0: bool = True) -> Any:
+    def _run_curve_fit(self, f: Any, num_parameters: int, results: Any, done_event: Any, quiet: bool = True, random_p0: bool = True) -> Any:
         """
         Runs the curve fit function with a timeout.
 
@@ -155,8 +155,7 @@ class Optimizer(object):
         popt = None
         try:
             popt, pcov = curve_fit(f, self.points[:, :-1].T, self.points[:, -1].T, p0=p0)
-            popt_dict = { str(coef): val for (coef, val) in zip(coefficients, popt) }
-            results.append((popt, pcov, popt_dict))
+            results.append((popt, pcov))
             done_event.set()
             return True
         except Exception as e:
@@ -197,13 +196,13 @@ class Optimizer(object):
         results = []
         if self.num_threads == 1:
             self.logger.info("Running optimization with 1 attempt.") if not quiet else None
-            self._run_curve_fit(f, len(coefficients), results=results, done_event=threading.Event(), coefficients=coefficients, quiet=quiet, random_p0=False)
-            popt, pcov, popt_dict = results[0]
+            self._run_curve_fit(f, len(coefficients), results=results, done_event=threading.Event(), quiet=quiet, random_p0=False)
+            popt, pcov = results[0]
         else:
             done_event = threading.Event()
             threads = []
             for i in range(self.num_threads):
-                threads.append(threading.Thread(target=lambda: self._run_curve_fit(f, len(coefficients), results=results, done_event=done_event, coefficients=coefficients, quiet=quiet, random_p0=i!=0)))
+                threads.append(threading.Thread(target=lambda: self._run_curve_fit(f, len(coefficients), results=results, done_event=done_event, quiet=quiet, random_p0=i!=0)))
                 threads[-1].start()
             
             done_event.wait(self.timeout)
@@ -224,19 +223,16 @@ class Optimizer(object):
             # Get the best parameters
             best_popt = None
             best_pcov = None
-            best_popt_dict = None
             best_error = np.inf
-            for popt, pcov, popt_dict in results:
+            for popt, pcov in results:
                 error = np.sum((f(Xs, *popt) - ys) ** 2)
                 if error < best_error:
                     best_error = error
                     best_popt = popt
                     best_pcov = pcov
-                    best_popt_dict = popt_dict
 
             popt = best_popt
             pcov = best_pcov
-            popt_dict = best_popt_dict
 
         if pcov is None or np.isinf(pcov).any() or np.isnan(pcov).any():
             raise ValueError("Optimization failed: covariance matrix is invalid")
@@ -248,10 +244,4 @@ class Optimizer(object):
         for i, coefficient in enumerate(coefficients):
             if popt[i] < self.tol and popt[i] > -self.tol:
                 zero_subs[coefficient] = 0
-        return exp.subs(list(zip(coefficients, popt))), coeff_exp.subs(zero_subs), popt_dict if return_coeff else None
-    
-    def add_data(self, new_data: np.ndarray) -> None:
-        """
-        Adds the new data point to the observed data list.
-        """
-        self.points = np.concatenate(self.points, new_data)
+        return exp.subs(list(zip(coefficients, popt))), coeff_exp.subs(zero_subs) if return_coeff else None

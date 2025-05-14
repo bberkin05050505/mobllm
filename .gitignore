@@ -11,7 +11,4 @@
 /openai
 **/profiles
 .venv
-/finals
-**/finals
-/finals_v1
-**/finals_v1
+/downloaded_models

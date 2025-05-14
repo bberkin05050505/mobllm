@@ -7,7 +7,7 @@ name: Qwen/Qwen2.5-3B-Instruct
 tokenizer_pad: \\[PAD\\]
 tokenizer_padding_side: left
 visual: false
-cache_dir: ""
+cache_dir: "C:\\Users\\Berkin\\Desktop\\PostUG\\Spring 2025\\MEng\\In-Context-Symbolic-Regression\\downloaded_models"
 
 # Seed functions prompt
 seed_function_prompt: seed_functions/generate_seed.txt
