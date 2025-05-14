@@ -19,7 +19,7 @@ checkpoints: [50, 100, 200, 300, 400, 500, 600, 700, 800, 900] # Partial results
 allowed_exp_types: 
   - "random_ed_baseline" 
   - "base_ed_and_sr"
-  - "base_ed_and_sr_different_prompts"
+  - "different_prompts"
   - "cost_change_in_prompts"
   - "bayesian_ed"
   - "prompt_optimization"
@@ -50,13 +50,13 @@ initialization:
   num_exps_l: 10
   epsilon_c: 0.95
   epsilon_r: 0.99
-  test_domain_d: [0, 8]
+  test_domain_d: [-2, 2]
   num_data_digits: 3
-  exp_type: base_ed_and_sr
+  exp_type: cost_change_in_prompts
 
 # ED parameters
 ED:
-  train_domain_d: [0, 4]
+  train_domain_d: [-1, 1]
   exp_budget_n: 5
   retries: 10
 

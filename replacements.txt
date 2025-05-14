@@ -1,0 +1,3 @@
+literal:C:/Users/Berkin/Desktop/PostUG/Spring 2025/MEng/mobllm/.venv/Scripts/python.exe==PYTHON_PATH
+literal:C:\\Users\\Berkin\\Desktop\\PostUG\\Spring 2025\\MEng\\mobllm==root_path
+literal:C:\\Users\\Berkin\\Desktop\\PostUG\\Spring 2025\\MEng\\hf_llms==cache_dir
