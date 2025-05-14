@@ -7,7 +7,7 @@ Below are the top performing {num_best_funcs_c} previous functions and the error
 {functions}
 The error metric penalizes both the deviations from the data, and also the complexity of the function.
 
-Your task is to give me a list of {num_to_sample_b} new functions that are different from and have a lower error value than all of the ones above. Only output the new functions and nothing else. Since it is known that f(x) has two physical parameters, only output functions with three coefficients: Use a and b for the physical parameters and c for the rest of the coefficients.
+Your task is to give me a list of {num_to_sample_b} new functions that are different from and have a lower error value than all of the ones above. Since it is known that f(x) has two physical parameters, only output functions with three coefficients: Use a and b for the physical parameters and c for the rest of the coefficients.
 
 Analyze the data, and the top performing functions, in order to generate functions with lower error.
 
@@ -19,4 +19,4 @@ Make absolutely sure that the functions you generate are completely different fr
 
 Remember that you can combine the simple building blocks (operations: +, -, *, /, ^, sqrt, exp, log, abs; trigonometric expressions: sin, cos, tan, sinh, cosh, tanh; constants: a, b, c; variables) in any way you want to generate more complex functions.
 
-The functions should all begin with the indicators "f1(x) = ", "f2(x) = "... 
+First, output your proposed functions. They should all begin with the indicators "f1(x) = ", "f2(x) = "... Then perform a detailed analysis of the information given to you. Write down your analysis of how you obtained the proposed functions step by step. 

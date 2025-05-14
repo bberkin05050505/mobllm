@@ -19,7 +19,7 @@ Analyze the points carefully: if there are any negative points in the input, sqr
 
 The functions should all begin with the indicators "f1(x) = ", "f2(x) = "... Only write the new function and no additional output.
 
-Your task is to combine a maximum of 7 of these basic blocks to create expressions that are not too complex. Different functions should include different basic blocks.
+Your task is to combine a maximum of 7 of these basic blocks to create expressions that are not too complex. Different functions should include different basic blocks. First, write the 5 functions. Then, write down your analysis steps, and how you arrive at the final functions you proposed. Think step by step!
 
 Points: {points}
 

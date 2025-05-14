@@ -1,5 +1,5 @@
 # General
-name: kobold/llama3.1-8.0B-Q4_K_M
+name: groq/qwen-qwq-32b
 tokenizer_pad: \\[PAD\\]
 tokenizer_padding_side: left
 visual: false
