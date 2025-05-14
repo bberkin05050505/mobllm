@@ -46,6 +46,7 @@ class ED(object):
         Returns
         -------
         The new experimental design with two decimal digits.
+        Also the raw LLM output.
         """
         self.logger.info(f"ED Round {iteration + 1}.")
         retries_left = self.ed_retries
@@ -53,7 +54,7 @@ class ED(object):
             all_train_points = utils.string_to_array(self.og_train_points)
         else:
             all_train_points = utils.string_to_array(self.og_train_points + ", " + info)
-
+        
         while retries_left > 0:
             if iteration == 0:
                 prompt = self.initial_prompt
@@ -113,7 +114,7 @@ class ED(object):
                 if retry:
                     continue
                 else:
-                    return exp_design
+                    return exp_design, output
             
         self.logger.warning("Could not find a valid experimental design in the output and no retries left. Raise exception.")
         raise Exception("Could not find a valid experimental design in the output and no retries left.")

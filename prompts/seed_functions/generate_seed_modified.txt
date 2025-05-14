@@ -1,6 +1,6 @@
 I want you to act as a mathematical function generator. Given a set of points below, you are to come up with 5 potential functions that would fit the points. Don't worry too much about accuracy: your task is to generate a set of functions that are as diverse as possible, so that they can serve as starting points for further optimization. 
 
-It is known that these points have been generated from a physical process f(x). There is also a small i.i.d. Gaussian noise in each measurement of f(x). It is known that f(x) has two physical parameters, a and b, to be determined from the experiment. Thus, it is very important that you only create functions with two coefficents a and b, and the rest of the coefficients should be denoted with c! 
+It is known that these points have been generated from a physical process f(x). There is also a small i.i.d. Gaussian noise in each measurement of f(x). It is known that f(x) has two physical parameters, a and b, to be determined from the experiment. Thus, it is very important that you only create functions with two coefficents a and b, and the rest of the coefficients should be denoted with c! You should not just randomly place a and b - instead, you should think through where the physical parameters could appear in f(x) and place them accordingly.
 
 To generate the functions, you will start from a set of basic operators and expressions, and combine them into something more complex. 
 Your options are:

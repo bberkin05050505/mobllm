@@ -37,8 +37,13 @@ class CurrentFunctions(object):
         self.scores = {}
         self.norm_scores = {}
         self.screen_names = {}
+        self.optimize_seed_functions(functions)
 
-        # Optimize seed function coefficients
+    def optimize_seed_functions(self, functions) -> None:
+        """
+        Optimizes seed function coefficients and updates the functions list. Returns a list of seed functions in coefficient form.
+        """
+        coeff_functions = []
         for function in functions:
             try:
                 optimized_function, coeff_function, popt_dict = self.optimizer.optimize(function, return_coeff=True, quiet=False)
@@ -61,6 +66,7 @@ class CurrentFunctions(object):
 
         self.logger.info(f"Current scores: {self.scores}.")
         self.logger.info(f"Current normalized scores: {self.norm_scores}.")
+        return coeff_functions
 
     def func_in_list(self, function: Any) -> bool:
         """

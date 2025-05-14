@@ -29,8 +29,10 @@ from sr import SR
 from typing import Dict, Tuple, List, Any
 from collections.abc import Callable
 
-from groq import Groq
+from openai import OpenAI
+from textgrad.engine.local_model_openai_api import ChatExternalClient
 import textgrad as tg
+
 
 class Workspace(object):
     """
@@ -303,7 +305,7 @@ class Workspace(object):
         min_seed_functions = max(5, self.num_to_sample_b) # If the prompt size is small (e.g. 1) we still want to generate a few seed functions to avoid getting stuck
         gen_time = 0
         if cfg.experiment.generate_seed_functions:
-            self.seed_functions, gen_time, self.model_seed_output = self.generate_seed_functions()
+            self.seed_functions, gen_time = self.generate_seed_functions()
             if (len(self.seed_functions) < min_seed_functions):
                 self.logger.warn(f"Could not generate {min_seed_functions} seed functions. Generated {len(self.seed_functions)} seed functions.")
         else:
@@ -356,57 +358,28 @@ class Workspace(object):
         with open(self.output_path + "config.yaml", "w") as f:
             OmegaConf.save(self.cfg, f)
 
-        # Generate the ED and SR phases
-        self.ED = ED(self.cfg, self.logger, self.base_ed_prompt, self.initial_ed_prompt, self.model, utils.array_to_string(self.train_points, self.num_digits))
+        # Generate the SR phase
         self.SR = SR(self.cfg, self.logger, self.current_functions, self.base_sr_prompt, self.temperature_scheduler,
                      self.results, self.model, self.optimizer, self.scorer, self.test_points, self.plotter, self.true_function,
                      self.output_path)
         
         # Set up textgrad
-        self.logger.info("Setting up textgrad...")
-   
-        tg.set_backward_engine("groq-llama3-70b-8192", override=True)
+        self.client = OpenAI(base_url="http://localhost:5001/v1", api_key="local_llm")
+        self.engine = ChatExternalClient(client=self.client, model_string='koboldcpp')
+        tg.set_backward_engine(self.engine, override=True)
 
-        # Set up seed function optimization
         self.seed_prompt, self.img_path = self.get_seed_prompt()
         self.seed_prompt_var = tg.Variable(self.seed_prompt, 
                                            requires_grad=True, 
                                            role_description="seed function generation for a given set of points")
         
-        self.loss_seed_prompt = self.get_loss_prompt("seed")
-        self.loss_seed_prompt_var = tg.Variable(self.loss_seed_prompt,
+        self.loss_prompt = self.get_loss_prompt()
+        self.loss_prompt_var = tg.Variable(self.loss_prompt,
                                            requires_grad=False,
                                            role_description="system prompt for critiquing the seed functions")
                                     
-        self.loss_seed_fn = tg.TextLoss(self.loss_seed_prompt_var)
-        self.seed_prompt_optimizer = tg.TGD([self.seed_prompt_var])
-
-        # Set up ED prompt optimization
-        self.ed_prompt_var = tg.Variable(self.base_ed_prompt, 
-                                           requires_grad=True, 
-                                           role_description="next measurement proposal prompt given past observations")
-        
-        self.loss_ed_prompt = self.get_loss_prompt("ed")
-        self.loss_ed_prompt_var = tg.Variable(self.loss_ed_prompt,
-                                           requires_grad=False,
-                                           role_description="system prompt for critiquing the proposed next measurement from a black box function")
-                                    
-        self.loss_ed_fn = tg.TextLoss(self.loss_ed_prompt_var)
-        self.ed_prompt_optimizer = tg.TGD([self.ed_prompt_var])
-
-        # Set up SR prompt optimization
-        self.sr_prompt_var = tg.Variable(self.base_sr_prompt, 
-                                           requires_grad=True, 
-                                           role_description="function proposal prompt given past observations")
-        
-        self.loss_sr_prompt = self.get_loss_prompt("sr")
-        self.loss_sr_prompt_var = tg.Variable(self.loss_sr_prompt,
-                                           requires_grad=False,
-                                           role_description="system prompt for critiquing the proposed functions given past observations")
-                                    
-        self.loss_sr_fn = tg.TextLoss(self.loss_sr_prompt_var)
-        self.sr_prompt_optimizer = tg.TGD([self.sr_prompt_var])
-
+        self.loss_fn = tg.TextLoss(self.loss_prompt_var)
+        self.prompt_optimizer = tg.TGD([self.seed_prompt_var])
         self.logger.warn("Finished initializing the workspace.")
 
     def generate_points(self, function: Callable, min_points: float, max_points: float, num: int, xs_noise_std: float = 0, ys_noise_std: float = 0, 
@@ -520,11 +493,11 @@ class Workspace(object):
         else: 
             return self.seed_prompt, self.img_path
     
-    def get_loss_prompt(self, loss_type) -> str:
+    def get_loss_prompt(self) -> str:
         """
-        Returns the loss prompt for the given type.
+        Returns the loss prompt.
         """
-        with open(os.path.join(self.prompts_path, self.cfg.loss_prompt_folder, loss_type + '.txt'), "r") as f:
+        with open(os.path.join(self.prompts_path, self.cfg.loss_prompt_folder, self.cfg.loss_prompt_name), "r") as f:
             loss_prompt = f.read()
             return loss_prompt
     
@@ -539,7 +512,6 @@ class Workspace(object):
         -------
         seed_functions -> the generated seed functions.
         gen_time -> the time it took to generate the seed functions.
-        seeds -> unparsed model output.
         """
         generation_tokens = self.cfg.experiment.seed_functions.generation_tokens if hasattr(self.cfg.experiment.seed_functions, "generation_tokens") else 512
         max_tries = self.cfg.experiment.seed_functions.max_tries if hasattr(self.cfg.experiment.seed_functions, "max_tries") else 10
@@ -582,7 +554,7 @@ class Workspace(object):
         end_time = time.perf_counter()
 
         self.logger.info(f"Generated seed functions: {seed_functions}.")
-        return seed_functions, end_time - start_time, seeds
+        return seed_functions, end_time - start_time
     
     def perform_checkpoint(self, iteration: int, main_timer_start: float) -> None:
         """
@@ -645,28 +617,10 @@ class Workspace(object):
 
         self.all_train_points = utils.array_to_string(self.train_points, self.num_digits)
 
-        seed_var = tg.Variable(
-                    value=self.model_seed_output,
-                    role_description="seed functions generated for a given set of points",
-                    requires_grad=True,
-                    predecessors=[self.seed_prompt_var],
-                )
-        seed_loss = self.loss_seed_fn(seed_var)
-        seed_loss.backward()
-        self.seed_prompt_optimizer.step()
-        self.seed_prompt_optimizer.zero_grad()
-        self.seed_prompt = self.seed_prompt_var.value
-        
-        # After the seed function generation prompt is optimized, we retry generating seed functions
-        self.logger.info(f"Optimized seed function generation prompt: {self.seed_prompt}")
-
-        new_seed_functions, gen_time, self.model_seed_output = self.generate_seed_functions()
-        coeff_functions = self.current_functions.optimize_seed_functions(new_seed_functions)
-
-        # Get the best scoring seed function and check if one of the generated seed functions is already below the cost tolerance 
+        # Check if one of the generated seed functions is already below the cost tolerance
         # Here, "score" is actually the cost value 
         best_expr = self.current_functions.get_best_function(return_coeff=True)
-        best_func = self.current_functions.get_best_function(return_coeff=False)
+        best_function = self.current_functions.get_best_function(return_coeff=False)
         score = self.current_functions.scores[best_expr]
         
         if score <= self.c_tolerance:
@@ -689,85 +643,40 @@ class Workspace(object):
         else:
             # Start the main loop
             budget_remaining = self.exp_budget_n
-            llm_sampled_data = ""
-            og_train_points = utils.array_to_string(self.train_points, self.num_digits)
 
             while budget_remaining > 0:
                 start_time = time.perf_counter()
                 iteration = self.exp_budget_n - budget_remaining
 
-                # Perform ED
-                proposed_design, model_output = self.ED.propose_design(llm_sampled_data, budget_remaining, iteration)
-
-                # Perform ED prompt optimization
-                if iteration == 0:
-                    self.ed_prompt_var.value = self.initial_ed_prompt
-                else:
-                    self.ed_prompt_var.value = self.base_ed_prompt
-
-                ed_var = tg.Variable(
-                    value=model_output,
-                    role_description="next measurement proposed given past observations",
-                    requires_grad=True,
-                    predecessors=[self.ed_prompt_var],
-                )
-                ed_loss = self.loss_ed_fn(ed_var)
-                ed_loss.backward()
-                self.ed_prompt_optimizer.step()
-                self.ed_prompt_optimizer.zero_grad()
+                # Perform prompt optimization
+                loss = self.loss_fn(self.seed_prompt_var)
+                loss.backward()
+                self.prompt_optimizer.step()
                 
-                if iteration == 0:
-                    self.ED.initial_prompt = self.ed_prompt_var.value
-                    self.initial_ed_prompt = self.ed_prompt_var.value
-                    self.logger.info(f"Optimized ED prompt: {self.initial_ed_prompt}")
-                else:
-                    self.ED.base_prompt = self.ed_prompt_var.value
-                    self.base_ed_prompt = self.ed_prompt_var.value
-                    self.logger.info(f"Optimized ED prompt: {self.base_ed_prompt}")
+                # After the seed function generation prompt is optimized, we retry generating seed functions
+                self.seed_prompt = self.seed_prompt_var.value
+                self.logger.info(f"Optimized seed function generation prompt after iteration {iteration + 1}: {self.seed_prompt}")
 
-                # Perform ED again with optimized prompt
-                proposed_design, model_output = self.ED.propose_design(llm_sampled_data, budget_remaining, iteration)
+                new_seed_functions, gen_time = self.generate_seed_functions()
+                coeff_functions = self.current_functions.optimize_seed_functions(new_seed_functions)
 
-                # sample data accordingly and update train points and round to self.num_digits digits
-                # new_point is an np array of a float, so we first access it and then round
-                new_point_y = utils.eval_function(self.true_function, np.array([proposed_design]), self.num_variables)
-                new_point_y = round(new_point_y.item(), self.num_digits)
+                # Get the best scoring seed function generated this iteration
+                best_func_this_iter = None
+                best_score_this_iter = np.inf
+                for seed in coeff_functions:
+                    func = self.current_functions.functions[seed]
+                    seed_score, seed_norm_score = self.scorer.score(func)
+                    if seed_score < best_score_this_iter:
+                        best_score_this_iter = seed_score
+                        best_func_this_iter = func
 
-                if llm_sampled_data == "":
-                    llm_sampled_data = str((proposed_design, new_point_y))
-                else:
-                    llm_sampled_data = llm_sampled_data + ", " + str((proposed_design, new_point_y))
-                self.all_train_points = og_train_points + ", " + llm_sampled_data
+                best_expr = self.current_functions.get_best_function(return_coeff=True)
+                best_func = self.current_functions.get_best_function(return_coeff=False)
+                best_score = self.current_functions.scores[best_expr]
 
-                # Update the training points to include the newly sampled points for everything they are used in
-                self.optimizer.points = utils.string_to_array(self.all_train_points)
-                self.scorer.points = utils.string_to_array(self.all_train_points)
-                self.plotter.train_points = utils.string_to_array(self.all_train_points)
-
-                # Don't forget to recompute scores with the newly sampled data point included before prompting the mode
-                self.current_functions.scores, self.current_functions.norm_scores = self.scorer.score_current_functions(self.current_functions.functions)
-
-                # Perform the SR phase
-                best_expr, best_func, best_score, model_output = self.SR.propose_exp_and_get_score(self.all_train_points, iteration, frames)
-
-                # Perform SR prompt optimization
-                sr_var = tg.Variable(
-                    value=model_output,
-                    role_description="functions proposed given past proposals",
-                    requires_grad=True,
-                    predecessors=[self.sr_prompt_var],
-                )
-                sr_loss = self.loss_sr_fn(sr_var)
-                sr_loss.backward()
-                self.sr_prompt_optimizer.step()
-                self.sr_prompt_optimizer.zero_grad()
-                
-                self.SR.base_prompt = self.sr_prompt_var.value
-                self.base_sr_prompt = self.sr_prompt_var.value
-                self.logger.info(f"Optimized SR prompt: {self.base_sr_prompt}")
-
-                # Perform SR again with optimized prompt
-                best_expr, best_func, best_score, model_output = self.SR.propose_exp_and_get_score(self.all_train_points, iteration, frames)
+                if best_expr in coeff_functions:
+                    self.results["best_found_at"] = iteration + 1
+                self.update_results(iteration, best_expr, best_func, best_func_this_iter, start_time, frames)
 
                 budget_remaining -= 1
 
@@ -853,6 +762,7 @@ def main(cfg: DictConfig) -> None:
         except Exception as e:
             print(f"Experiment {_ + 1} failed: {e}")
             continue
+
     print(f"Success ratio: {success}/{num_exps}")
     
 def dump_profile():
