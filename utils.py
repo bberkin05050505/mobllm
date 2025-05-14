@@ -58,6 +58,43 @@ def load_model(model_name: str, device: device, dtype: dtype, cache_dir: str = N
 
     return model
 
+def get_messages(prompt: str, splits: List[str] = ["system", "user"]) -> List[Dict[str, str]]:
+    """
+    Converts a prompt string into a list of messages for each split.
+    
+    Parameters:
+        prompt (str): The prompt string.
+        splits (list[str]): A list of the splits to parse. Defaults to ["system", "user"].
+        
+    Returns:
+        list[dict[str, str]]: A dictionary of the messages for each split.
+    """
+    
+    messages = []
+    for split in splits:
+        start_tag = f"<{split}>"
+        end_tag = f"</{split}>"
+
+        start_idx = prompt.find(start_tag)
+        end_idx = prompt.find(end_tag)
+        
+        # Skip if the split is not in the prompt (e.g. no system prompt)
+        if start_idx == -1 or end_idx == -1:
+            continue
+        messages.append({
+            "role": split,
+            "content": prompt[start_idx + len(start_tag):end_idx].strip()
+        })
+    
+    # If no splits at all, assume the whole prompt is a user message
+    if len(messages) == 0:
+        messages.append({
+            "role": "user",
+            "content": prompt
+        })
+
+    return messages
+
 def load_points(file_path: str) -> np.ndarray:
     """
     Loads a set of points from a file.

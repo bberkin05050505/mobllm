@@ -599,7 +599,7 @@ class Workspace(object):
                 iteration = self.exp_budget_n - budget_remaining
 
                 # perform experimental design
-                proposed_design = self.ED.propose_design(llm_sampled_data, budget_remaining, iteration)
+                proposed_design = self.ED.propose_design(iteration)
                 
                 # sample data accordingly and update train points and round to self.num_digits digits
                 # new_point is an np array of a float, so we first access it and then round

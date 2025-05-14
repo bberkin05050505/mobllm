@@ -9,7 +9,7 @@ train_points:
   data_folder: "data/series_RC/series_RC1"
   # This part is only used if generate_points is true
   xs_noise_std: 0
-  ys_noise_std: 0.001
+  ys_noise_std: 0.05
   random: true
   add_extremes: true # Manually adds points at the extremes of the interval if random is true
 
