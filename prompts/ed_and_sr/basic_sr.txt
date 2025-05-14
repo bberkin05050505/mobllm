@@ -5,13 +5,8 @@ Below are the top performing {num_best_funcs_c} previous functions and the error
 {functions}
 The error metric penalizes both the deviations from the data, and also the complexity of the function.
 
-Your task is to give me a list of {num_to_sample_b} new functions that will have a lower error value than all of the ones above. Only output the new functions and nothing else.
-
+Your task is to give me a list of {num_to_sample_b} new functions that are different from all the ones reported below, and have a lower error value than all of the ones below. Only output the new functions and nothing else.
 Remember that the functions you generate should always have at most {num_variables} variables {variables_list}. 
-
-Analyze the data, and the top performing functions, in order to generate functions with lower error.
-
-Feel free to combine different parts of the top performing functions together or mutate them when generating new functions.
 
 The functions should have parametric form, using 'c' in place of any constant or coefficient. The coefficients will be optimized to fit the data. Make absolutely sure that the functions you generate are completely different from the ones already given to you.
 Remember that you can combine the simple building blocks (operations, constants, variables) in any way you want to generate more complex functions. Don't be afraid to experiment!

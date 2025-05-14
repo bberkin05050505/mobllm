@@ -10,4 +10,4 @@ The domain of f is {domain}. Your task is to give me a single point x_0 from thi
 information possible about f. Remember that you only have {budget_remaining} measurements left, so analyze the past observations very carefully before
 you propose x_0!
 
-Only output x_0 and nothing else. Use the form "x_0 = ...". Again, I repeat - ONLY output x_0!
+Only output x_0 and nothing else. Use the form "x_0 = ..."

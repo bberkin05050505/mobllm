@@ -116,5 +116,5 @@ class ED(object):
                 else:
                     return exp_design
             
-        self.logger.warning("Could not find a valid experimental design in the output and no retries left. Exit.")
-        sys.exit(1)
+        self.logger.warning("Could not find a valid experimental design in the output and no retries left. Raising exception.")
+        raise Exception("Could not find a valid experimental design in the output and no retries left.")
