@@ -54,7 +54,7 @@ class ED(object):
             all_train_points = utils.string_to_array(self.og_train_points)
         else:
             all_train_points = utils.string_to_array(self.og_train_points + ", " + info)
-            
+        
         while retries_left > 0:
             if iteration == 0:
                 prompt = self.initial_prompt

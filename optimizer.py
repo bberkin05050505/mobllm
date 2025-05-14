@@ -50,7 +50,7 @@ class Optimizer(object):
         -------
         exp : sympy.core.add.Add -> The function with coefficients replaced.
         """
-        COEFFICIENT_WHITELIST = {'a', 'b'}
+        COEFFICIENT_WHITELIST = {'a', 'b', 'd'}
 
         def is_coefficient(symbol: Any) -> bool:
             if len(symbol.args) > 0:

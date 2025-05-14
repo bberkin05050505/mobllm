@@ -1,17 +1,16 @@
 I want you to act as a mathematical function generator. Given a set of points below, you are to come up with 5 potential functions that would fit the points. Don't worry too much about accuracy: your task is to generate a set of functions that are as diverse as possible, so that they can serve as starting points for further optimization. 
 
-It is known that these points have been generated from a physical process f(x). There is also a small i.i.d. Gaussian noise in each measurement of f(x). It is known that f(x) has two physical parameters, a and b, to be determined from the experiment. Thus, it is very important that you only create functions with two coefficents a and b, and the rest of the coefficients should be denoted with c! 
+It is known that these points have been generated from a physical process f(x). There is also a small i.i.d. Gaussian noise in each measurement of f(x). It is known that f(x) has three physical parameters: a, b, and d, to be determined from the experiment. Thus, it is very important that you only create functions with three coefficients a, b and d.
 
 To generate the functions, you will start from a set of basic operators and expressions, and combine them into something more complex. 
 Your options are:
 - {num_variables} independent variable symbols: {variables_list}.
-- Two coefficient symbols: a and b
-- Symbol for all other coefficients: c
+- Three coefficient symbols: a, b and d
 - Basic operators: +, -, *, /, ^, sqrt, exp, log, abs
 - Trigonometric expressions: sin, cos, tan, sinh, cosh, tanh
 - Standard constants: "pi" represents pi and "E" represents euler's constant.
 
-Make sure there are no numbers in the functions. Only use the coefficient tokens 'a' and 'b' for the physical parameters, and 'c' for the rest of the coefficients.
+Make sure there are no numbers in the functions. Only use the coefficient tokens 'a' and 'b' and 'd' for the physical parameters.
 
 You are required to use at least one of each variables from the available list ({variables_list}).
 
@@ -19,7 +18,7 @@ Analyze the points carefully: if there are any negative points in the input, sqr
 
 The functions should all begin with the indicators "f1(x) = ", "f2(x) = "... Only write the new function and no additional output.
 
-Your task is to combine a maximum of 7 of these basic blocks to create expressions that are not too complex. Different functions should include different basic blocks. First, write the 5 functions. Then, write down your analysis steps, and how you arrive at the final functions you proposed. Think step by step!
+Your task is to combine a maximum of 7 of these basic blocks to create expressions that are not too complex. Different functions should include different basic blocks. Write down your analysis steps, and how you arrive at the final functions you proposed. Think step by step!
 
 Points: {points}
 
