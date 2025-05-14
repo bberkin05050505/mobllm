@@ -1,0 +1,13 @@
+defaults:
+- function: nguyen/nguyen8
+- scorer: complexity_scorer
+- seed_functions: generate
+- _self_
+generate_seed_functions: true
+optimizer:
+  optimizer_threads: 5
+  timeout: 10
+  p0_min: -5
+  p0_max: 5
+  coeff_rounding: 4
+  tol: 1e-3

@@ -1,0 +1,16 @@
+name: "nguyen7"
+group: "nguyen"
+
+# Train points
+train_points:
+  generate_points: true
+  data_folder: "data/nguyen/nguyen7"
+  # This part is only used if generate_points is true
+  xs_noise_std: 0
+  ys_noise_std: 0
+  random: true
+  add_extremes: true # Manually adds points at the extremes of the interval if random is true
+
+# Test function
+test_function: "log(x + 1) + log(x^2 + 1)"
+num_variables: 1

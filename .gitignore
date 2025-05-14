@@ -1,0 +1,17 @@
+**.out
+/__pycache__
+**/__pycache__
+/.ipynb_checkpoints
+/outputs
+**/outputs
+/runs
+**/runs
+/multirun
+**/multirun
+/openai
+**/profiles
+.venv
+/finals
+**/finals
+/finals_v1
+**/finals_v1
