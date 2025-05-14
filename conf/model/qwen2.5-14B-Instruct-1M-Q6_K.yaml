@@ -1,7 +1,3 @@
-defaults:
-  - base_prompt: basic_text
-  - _self_
-
 # General
 name: kobold/Qwen2.5-14B-Instruct-1M-Q6_K
 tokenizer_pad: \\[PAD\\]
@@ -13,7 +9,7 @@ cache_dir: ""
 seed_function_prompt: seed_functions/generate_seed.txt
 
 # Sampling
-max_new_tokens: 512
+max_new_tokens: 128
 top_p: 0.90
 top_k: 60
 num_beams: 1

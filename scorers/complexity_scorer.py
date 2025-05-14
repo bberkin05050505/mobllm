@@ -5,7 +5,7 @@ import numpy as np
 import utils
 import sys
 
-from typing import Dict, Tuple
+from typing import Dict, Tuple, List
 
 class ComplexityScorer(Scorer):
     """
@@ -82,7 +82,7 @@ class ComplexityScorer(Scorer):
             
         return error 
     
-    def score_current_functions(self, current_functions: Dict[str, callable]) -> Tuple[Dict, Dict]:
+    def score_current_functions(self, current_functions: Dict[str, Tuple[callable, List]]) -> Tuple[Dict, Dict]:
         """
         Scores the current functions in the prompt.
 
@@ -97,7 +97,7 @@ class ComplexityScorer(Scorer):
         scores -> the score of the current functions.
         normalized_scores -> the normalized score of the current functions.
         """
-        scores = { function: self.score(current_functions[function]) for function in current_functions }
+        scores = { function: self.score(current_functions[function][0]) for function in current_functions }
         normalized_scores = scores.copy()
         if self.scientific:
             normalized_scores = { name: format_exp(score, self.round) for name, score in normalized_scores.items()}

@@ -76,8 +76,13 @@ class Plotter(object):
             # plt.grid(alpha=.4,linestyle='--')
             plt.xlabel("x")
             plt.ylabel("f(x)")
+
+            # x axis limits are equal to the test domain
             plt.xlim(self.min_points[0] - 0.1 * (self.max_points[0] - self.min_points[0]), self.max_points[0] + 0.1 * (self.max_points[0] - self.min_points[0]))
-            plt.ylim(np.min(self.train_points[:, 1]) - 0.1 * (np.max(self.train_points[:, 1]) - np.min(self.train_points[:, 1])), np.max(self.train_points[:, 1]) + 0.1 * (np.max(self.train_points[:, 1]) - np.min(self.train_points[:, 1])))
+
+            # Change y_points to self.train_points[:, 1] if you want to limit the y axis to training values
+            y_points = self.test_points[:, 1]
+            plt.ylim(np.min(y_points) - 0.1 * (np.max(y_points) - np.min(y_points)), np.max(y_points) + 0.1 * (np.max(y_points) - np.min(y_points)))
             plt.legend()
         elif self.num_variables == 2:
             ax = plt.figure(figsize=self.fig_size).add_subplot(projection='3d')

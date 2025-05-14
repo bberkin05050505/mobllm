@@ -19,7 +19,7 @@ class CurrentFunctions(object):
         ----------
         seed_functions -> the seed functions to use.
         scorer -> the scorer to use.
-        context_len -> the length of the context.
+        context_len -> the number of best functions to include in the prompt. equal to num_best_funcs_c.
         logger -> the logger to use.
         num_variables -> the number of variables.
         """
@@ -33,6 +33,7 @@ class CurrentFunctions(object):
         functions = [utils.string_to_function(name, self.num_variables) for name in self.seed_functions.keys()]
         self.logger.info(f"Seed functions: {functions}.")
         self.functions = {}
+        self.optimized_params = {}
         self.scores = {}
         self.norm_scores = {}
         self.screen_names = {}
@@ -40,11 +41,12 @@ class CurrentFunctions(object):
         # Optimize seed function coefficients
         for function in functions:
             try:
-                optimized_function, coeff_function = self.optimizer.optimize(function, return_coeff=True, quiet=False)
+                optimized_function, coeff_function, popt_dict = self.optimizer.optimize(function, return_coeff=True, quiet=False)
                 if self.func_in_list(coeff_function):
                     self.logger.warning(f"Function {coeff_function} already in prompt.")
                     continue
-                self.functions[coeff_function] = optimized_function
+                self.functions[coeff_function] = (optimized_function, popt_dict)
+                self.optimized_params[coeff_function] = popt_dict
                 self.logger.info(f"Optimized seed function: {str(coeff_function)}.")
             except Exception as e:
                 self.logger.warning(f"Could not optimize function {function}. {e}")
@@ -101,7 +103,7 @@ class CurrentFunctions(object):
         
         print(f"Finished cleaning scores {self.scores}.")
 
-    def add_function(self, expr: Any, function: Any) -> None:
+    def add_function(self, expr: Any, function: Any, popt: Any) -> None:
         """
         Adds a function to the current functions.
 
@@ -109,6 +111,7 @@ class CurrentFunctions(object):
         ----------
         expr -> the coefficient form of the function.
         function -> the function to add.
+        popt -> the optimized parameters dict for the function.
         """
         self.logger.info(f"Adding function {expr}.")
         
@@ -121,7 +124,8 @@ class CurrentFunctions(object):
             self.logger.info(f"Function {expr} has score {self.scorer.score(function)}, which is higher than the current worst score {np.max(list(self.scores.values()))}.")
             return
         
-        self.functions[expr] = function
+        self.functions[expr] = (function, popt)
+        self.optimized_params[expr] = popt
         self.screen_names[expr] = re.sub(r'c\d+', 'c', str(expr))
         self.scores, self.norm_scores = self.scorer.score_current_functions(self.functions)
         self.clean_scores()
@@ -142,16 +146,26 @@ class CurrentFunctions(object):
         """
         Gets the best function in the current functions.
 
+        Parameters
+        ----------
+        return_coeff -> whether to return the function in coefficient form.
+
         Returns
         -------
         best_function -> the best function in the current functions.
-        return_coeff -> whether to return the function in coefficient form.
         """
         best_function = sorted(self.scores.items(), key=lambda x: x[1])[0][0]
         if return_coeff:
             return best_function
         else:
-            return self.functions[best_function]
+            return self.functions[best_function][0]
+        
+    def get_best_score(self) -> float:
+        """
+        Gets the score of the best function in the current functions.
+        """
+        return sorted(self.scores.items(), key=lambda x: x[1])[0][1]
+        
     
     def get_prompt_functions(self) -> Dict[str, float]:
         """
@@ -180,6 +194,6 @@ class CurrentFunctions(object):
         """
         top_functions = self.get_prompt_functions()
         functions = "\n".join([f'Function: {self.screen_names[function_name]}\nError: {fit}\n' for function_name, fit in top_functions])
-        functions += "\nNew Functions: "
+        # functions += "\nNew Functions: "
         prompt = base_prompt.format(functions=functions)
         return prompt
