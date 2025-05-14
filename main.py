@@ -367,7 +367,7 @@ class Workspace(object):
             OmegaConf.save(self.cfg, f)
 
         # Generate the ED and SR phases
-        self.ED = ED(self.cfg, self.logger, self.base_ed_prompt, self.initial_ed_prompt, self.model, utils.array_to_string(self.train_points, self.num_digits))
+        self.ED = ED(self.cfg, self.logger, utils.array_to_string(self.train_points, self.num_digits))
         self.SR = SR(self.cfg, self.logger, self.current_functions, self.base_sr_prompt, self.temperature_scheduler,
                      self.results, self.model, self.optimizer, self.scorer, self.test_points, self.plotter, self.true_function,
                      self.output_path)
@@ -487,7 +487,7 @@ class Workspace(object):
         img_path = os.path.join(self.output_path, "points.png") if self.input_img else None
 
         prompt = prompt.format(points=utils.array_to_string(self.train_points, self.num_digits), num_variables=self.num_variables, 
-                               variables_list=[f"x{i+1}" for i in range(self.num_variables)], num_init_pts_k=self.num_init_pts_k)
+                               variables_list=[f"x{i+1}" for i in range(self.num_variables)])
         self.logger.info("Prompt for seed functions generation:")
         self.logger.info(prompt)
         
@@ -599,7 +599,7 @@ class Workspace(object):
                 iteration = self.exp_budget_n - budget_remaining
 
                 # perform experimental design
-                proposed_design = self.ED.propose_design(llm_sampled_data, budget_remaining, iteration)
+                proposed_design = self.ED.propose_random_design(iteration)
                 
                 # sample data accordingly and update train points and round to self.num_digits digits
                 # new_point is an np array of a float, so we first access it and then round
@@ -662,7 +662,6 @@ class Workspace(object):
         self.logger.info(f"Dense training score: {dense_training_score}.")
         self.logger.info(f"Best function: {best_function}. Score: {self.current_functions.scores[best_expr]} ({self.current_functions.norm_scores[best_expr]}).")
         
-        self.results["final_train_points"] = self.all_train_points
         self.results["best_function"] = str(best_function)
         self.results["best_expr"] = str(best_expr)
         self.results["best_popt"] = str(best_popt)
@@ -679,7 +678,7 @@ class Workspace(object):
         self.results["r2_dense_train"] = r2_dense_train
         self.results["r2_test"] = r2_test
         self.results["r2_all"] = r2_all
-        self.logger.info(f"R2 train: {np.round(r2_train, 6)}. R2 dense train: {np.round(r2_dense_train, 6)} R2 test: {np.round(r2_test, 6)}. R2 all: {np.round(r2_all, 6)}.")
+        self.logger.info(f"R2 train: {np.round(r2_train, 6)}. R2 test: {np.round(r2_test, 6)}. R2 all: {np.round(r2_all, 6)}.")
         
         final_complexity = utils.count_nodes(best_function)
         self.results["final_complexity"] = final_complexity

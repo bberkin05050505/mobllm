@@ -8,8 +8,7 @@ MAIN_SCRIPT = "main.py"
 PYTHON_EXE_PATH = "" # FILL HERE
 
 # The functions to sweep over
-functions_ = ["nguyen/nguyen4", "nguyen/nguyen5", "nguyen/nguyen6", "nguyen/nguyen7", "nguyen/nguyen8"]
-functions = ["nguyen/nguyen1", "nguyen/nguyen2", "nguyen/nguyen3"]
+functions = ["nguyen/nguyen4", "nguyen/nguyen5", "nguyen/nguyen6", "nguyen/nguyen7", "nguyen/nguyen8"]
 
 for fn in functions:
     # Load the current YAML
