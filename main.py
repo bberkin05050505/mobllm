@@ -633,25 +633,35 @@ class Workspace(object):
                 # Perform symbolic regression, optimization, compute cost and update results
                 best_expr, best_func, best_score = self.SR.propose_exp_and_get_score(self.all_train_points, iteration, frames)
 
-                # Update the prior and the prior entropy for the next iteration. If an error is raised during posterior computation, the function must have resulted in 0 likelihood. Then, keep the old prior as is and the information gain as 0.
-                observed_data = utils.string_to_array(self.all_train_points)   
-                information_gain = 0
+                # Update priors
+                observed_data = utils.string_to_array(self.all_train_points)
+                max_information_gain = 0
+                best_posterior = None
 
-                # Replace all the coefficients in the expression with the optimized parameters, 
-                # except those in self.parameter_names
-                optimized_param_dict = self.current_functions.optimized_params[best_expr]
-                optimized_param_dict = { param: val for param, val in optimized_param_dict.items() if param not in self.parameter_names }
-                replaced_exp = utils.replace_coefficients(str(best_expr), optimized_param_dict)
+                for exp, func in self.current_functions.functions.items():
+                    # Replace all the coefficients in the expression with the optimized parameters, 
+                    # except those in self.parameter_names
+                    optimized_param_dict = func[1]
+                    optimized_param_dict = { param: val for param, val in optimized_param_dict.items() if param not in self.parameter_names }
+                    
+                    replaced_exp = utils.replace_coefficients(str(exp), optimized_param_dict)
 
-                try:
-                    likelihood = self.ED.compute_likelihood(observed_data, replaced_exp)
-                    posterior, information_gain = self.ED.update_posterior(likelihood)
-                    self.ED.prior = posterior
-                    self.ED.prior_entropy = self.ED.prior_entropy - information_gain 
-                except:
-                    pass
+                    try:
+                        likelihood = self.ED.compute_likelihood(observed_data, replaced_exp)
+                        posterior, information_gain = self.ED.update_posterior(likelihood)
 
-                new_data_with_IG = str((proposed_design, new_point_y, information_gain))    
+                        if information_gain > max_information_gain:
+                            max_information_gain = information_gain
+                            best_posterior = posterior
+                    except:
+                        continue
+
+                # Update the prior and the prior entropy for the next iteration. If posterior is None, either all the functions resulted in 0 likelihoods or there was negative information gain. Then, keep the old prior as is and and the information gain as 0.
+                if best_posterior is not None:
+                    self.ED.prior = best_posterior  
+                    self.ED.prior_entropy = self.ED.prior_entropy - max_information_gain
+
+                new_data_with_IG = str((proposed_design, new_point_y, max_information_gain))    
                 if iteration == 0:
                     llm_sampled_data_with_IG = new_data_with_IG
                 else:

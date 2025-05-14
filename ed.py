@@ -129,7 +129,7 @@ class ED(object):
             all_train_points = utils.string_to_array(self.og_train_points)
         else:
             all_train_points = utils.string_to_array(self.og_train_points + ", " + only_points)
-        
+            
         while retries_left > 0:
             if iteration == 0:
                 prompt = self.initial_prompt
@@ -166,6 +166,7 @@ class ED(object):
                         self.logger.info(f"Proposed experimental design for iteration {iteration + 1} is: {exp_design}")
                         break
                     else:
+                        self.logger.warning("Found a line with x in it but it is not properly formatted.")
                         self.logger.warning("Found a line with x in it but it is not properly formatted.")
                 except Exception as e:
                     self.logger.warning(f"Could not parse line {line}.")
