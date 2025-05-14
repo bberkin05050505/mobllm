@@ -56,7 +56,6 @@ class Workspace(object):
         while os.path.exists(self.output_path):
             self.output_path = os.path.join(self.root_dir, self.output_dir, experiment_folder_name, model_folder_name, self.exp_type, datetime.datetime.now().strftime("%Y%m%d-%H%M%S") + "-" + str(np.random.randint(0, 1000)) + "/")
         os.makedirs(self.output_path)
-        os.makedirs(self.output_path + "posteriors/")
 
         # Logger setup
         cfg.logger.run_id = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
@@ -156,15 +155,7 @@ class Workspace(object):
     
         self.checkpoints = cfg.checkpoints
 
-        self.parameter_names = cfg.experiment.function.parameters
         self.true_function_name = cfg.experiment.function.test_function
-
-        # Replace parameters in the true_function_name with their values from true_parameters
-        if hasattr(cfg.experiment.function, "parameters") and hasattr(cfg.experiment.function, "true_parameter_values"):
-            for param, value in zip(self.parameter_names, cfg.experiment.function.true_parameter_values.values()):
-                self.true_function_name = self.true_function_name.replace(param, str(value))
-
-        # Convert the true_function_name string into a callable function
         self.true_function = utils.string_to_function(self.true_function_name, self.num_variables)
 
         # Points setup
@@ -602,21 +593,20 @@ class Workspace(object):
             # Start the main loop
             budget_remaining = self.exp_budget_n
             llm_sampled_data = ""
-            llm_sampled_data_with_IG = ""
             og_train_points = utils.array_to_string(self.train_points, self.num_digits)
 
             while budget_remaining > 0:
                 iteration = self.exp_budget_n - budget_remaining
 
                 # perform experimental design
-                proposed_design = self.ED.propose_design(llm_sampled_data_with_IG, llm_sampled_data, budget_remaining, iteration)
+                proposed_design = self.ED.propose_design(llm_sampled_data, budget_remaining, iteration)
                 
                 # sample data accordingly and update train points and round to self.num_digits digits
                 # new_point is an np array of a float, so we first access it and then round
                 new_point_y = utils.eval_function(self.true_function, np.array([proposed_design]), self.num_variables)
                 new_point_y = round(new_point_y.item(), self.num_digits)
 
-                if iteration == 0:
+                if llm_sampled_data == "":
                     llm_sampled_data = str((proposed_design, new_point_y))
                 else:
                     llm_sampled_data = llm_sampled_data + ", " + str((proposed_design, new_point_y))
@@ -633,45 +623,7 @@ class Workspace(object):
                 # Perform symbolic regression, optimization, compute cost and update results
                 best_expr, best_func, best_score = self.SR.propose_exp_and_get_score(self.all_train_points, iteration, frames)
 
-                # Update priors
-                observed_data = utils.string_to_array(self.all_train_points)
-                max_information_gain = 0
-                best_posterior = None
-
-                for exp, func in self.current_functions.functions.items():
-                    # Replace all the coefficients in the expression with the optimized parameters, 
-                    # except those in self.parameter_names
-                    optimized_param_dict = func[1]
-                    optimized_param_dict = { param: val for param, val in optimized_param_dict.items() if param not in self.parameter_names }
-                    
-                    replaced_exp = utils.replace_coefficients(str(exp), optimized_param_dict)
-
-                    try:
-                        likelihood = self.ED.compute_likelihood(observed_data, replaced_exp)
-                        posterior, information_gain = self.ED.update_posterior(likelihood)
-
-                        if information_gain > max_information_gain:
-                            max_information_gain = information_gain
-                            best_posterior = posterior
-                    except:
-                        continue
-
-                # Update the prior and the prior entropy for the next iteration. If posterior is None, either all the functions resulted in 0 likelihoods or there was negative information gain. Then, keep the old prior as is and and the information gain as 0.
-                if best_posterior is not None:
-                    self.ED.prior = best_posterior  
-                    self.ED.prior_entropy = self.ED.prior_entropy - max_information_gain
-
-                new_data_with_IG = str((proposed_design, new_point_y, max_information_gain))    
-                if iteration == 0:
-                    llm_sampled_data_with_IG = new_data_with_IG
-                else:
-                    llm_sampled_data_with_IG += ", " + new_data_with_IG
-                    
                 budget_remaining -= 1
-
-                # Save the posterior distribution plots
-                fig, ax = self.ED.plot_posteriors(iteration)
-                fig.savefig(self.output_path + f"posteriors/iteration_{iteration + 1}.png")
 
                 # Check if the true function has been found
                 if self.true_function is not None:

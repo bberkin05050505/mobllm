@@ -1,10 +1,8 @@
 defaults:
-  - function: series_RC/series_RC_resistor
-  - scorer: complexity_scorer
-  - seed_functions: generate
-  - _self_
-
-# Seed functions
+- function: series_RC/series_RC_resistor
+- scorer: complexity_scorer
+- seed_functions: generate
+- _self_
 generate_seed_functions: true
 optimizer:
   optimizer_threads: 5

@@ -474,14 +474,3 @@ def replace_zero_coefficients(expr: Any, formula: Any, threshold: float = 1e-2) 
     expr = expr.subs(expr_dict)
     
     print(expr, formula)
-
-
-def replace_coefficients(exp: str, coeff_dict: dict) -> str:
-    # Match variable-like tokens: a, b, c0, c1, etc.
-    pattern = r'\b(' + '|'.join(re.escape(k) for k in coeff_dict.keys()) + r')\b'
-    
-    def repl(match):
-        key = match.group(0)
-        return str(coeff_dict[key])
-    
-    return re.sub(pattern, repl, exp)

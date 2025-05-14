@@ -21,9 +21,8 @@ allowed_exp_types:
   - "base_ed_and_sr"
   - "base_ed_and_sr_different_prompts"
   - "cost_change_in_prompts"
-  - "bayesian_ed_different_prompts"
+  - "bayesian_ed"
   - "prompt_optimization"
-  - "ig_lowest_entropy"
 
 # Torch
 device: 'cuda' # auto works for both CPU and GPU and can be used in a multi-GPU setup
@@ -48,12 +47,12 @@ plotter:
 initialization:
   num_init_pts_k: 7
   num_test_pts_m: 100
-  num_exps_l: 3
+  num_exps_l: 8
   epsilon_c: 0.95
   epsilon_r: 0.99
   test_domain_d: [0, 3]
   num_data_digits: 3
-  exp_type: ig_lowest_entropy
+  exp_type: base_ed_and_sr
 
 # ED parameters
 ED:

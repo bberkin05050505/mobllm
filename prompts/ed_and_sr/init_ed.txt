@@ -6,6 +6,6 @@ You are allowed to analyze past data, use your creativity and any knowledge you 
 
 You have the following {num_init_pts_k} prior (x, f(x)) points sampled for you (with the Gaussian noise included): {prior_data}
 
-Now, give me a single point x from the domain of f, which I will then sample. I want x to provide the highest information possible about f. Remember that you only have {budget_remaining} measurements left, so analyze the past observations very carefully before you propose x!
+Now, give me a single point x from the domain of f, which I will then sample. I want x to provide the highest information possible about f. x should also be absolutely different from the previous measurements above! Remember that you only have {budget_remaining} measurements left, so analyze the past observations very carefully before you propose x!
 
 Only output x as a number and nothing else. Use the form "x = ..."

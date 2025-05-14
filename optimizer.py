@@ -7,7 +7,7 @@ import numpy as np
 from omegaconf import DictConfig
 from scipy.optimize import curve_fit
 from mloggers import MultiLogger
-from typing import Any, List, Tuple, Dict
+from typing import Any
 from sympy import Mul, Add, Dummy, sift, numbered_symbols
 
 class Optimizer(object):
@@ -28,16 +28,7 @@ class Optimizer(object):
         self.cfg = cfg
         self.logger = logger
         self.points = points
-
         self.num_variables = cfg.experiment.function.num_variables
-
-        # If a discrete set of parameters is given, use that. If a start and an end value is given, create a parameter range with the specified number of points
-        self.parameter_ranges = cfg.experiment.function.parameter_ranges
-        if len(self.parameter_ranges["a"]) == 2:
-            self.parameter_ranges["a"] = np.linspace(self.parameter_ranges["a"][0], self.parameter_ranges["a"][1], cfg.experiment.function.parameter_ranges.num_points_a)
-        if len(self.parameter_ranges["b"]) == 2:
-            self.parameter_ranges["b"] = np.linspace(self.parameter_ranges["b"][0], self.parameter_ranges["b"][1], cfg.experiment.function.parameter_ranges.num_points_b)
-
         self.invalid_coefficients = ["x", "y", "e"]
 
         self.coeff_rounding = cfg.experiment.optimizer.coeff_rounding if hasattr(cfg.experiment, "optimizer") and hasattr(cfg.experiment.optimizer, "coeff_rounding") else 2
@@ -156,16 +147,14 @@ class Optimizer(object):
         symbols = [symbols[:num_variables], *symbols[num_variables:]]
         return sympy.lambdify(symbols, exp, "numpy"), exp
     
-    def _run_curve_fit(self, f: Any, a_values: List, b_values: List, coefficients: Any, results: Any, done_event: Any, quiet: bool = True, random_p0: bool = True) -> Any:
+    def _run_curve_fit(self, f: Any, num_parameters: int, results: Any, done_event: Any, coefficients: Any, quiet: bool = True, random_p0: bool = True) -> Any:
         """
         Runs the curve fit function with a timeout.
 
         Parameters
         ----------
         f : Any -> The function to fit.
-        a_values : Any -> The values of a to use.
-        b_values : Any -> The values of b to use.
-        coefficients: Any -> All the coefficients to optimize.
+        num_parameters : int -> The number of parameters to fit.
         results : Any -> The results list to append to.
         done_event : Any -> The event to set when done.
         quiet : bool -> Whether to log the results.
@@ -176,34 +165,21 @@ class Optimizer(object):
         popt : np.ndarray -> The optimized parameters.
         pcov : np.ndarray -> The covariance matrix.
         """
-        # Perform grid search over discrete values of a and b
-        for a in a_values:
-            for b in b_values:
-                    # Fix a and b, optimize remaining coefficients
-                fixed_params = {'a': a, 'b': b}
-                remaining_coefficients = [c for c in coefficients if str(c) not in fixed_params]
-
-                def fixed_func(X, *remaining_values):
-                    # Combine fixed parameters with optimized ones
-                    params = {**fixed_params, **{str(k): v for k, v in zip(remaining_coefficients, remaining_values)}}
-                    return f(X, **params)
-
-
-                p0 = np.random.uniform(self.p0_min, self.p0_max, len(remaining_coefficients)) if random_p0 else np.ones(len(remaining_coefficients))
-                popt = None
-                try:
-                    popt, pcov = curve_fit(fixed_func, self.points[:, :-1].T, self.points[:, -1].T, p0=p0)
-                    # add the a and b values to the popt list
-                    popt = [a, b] + list(popt)
-                    popt_dict = { str(coef): val for (coef, val) in zip(coefficients, popt) }
-                    results.append((popt, pcov, popt_dict))
-                    done_event.set()
-                except Exception as e:
-                    print(f"Optimization failed: {e}")
-                    pass
+        p0 = np.random.uniform(self.p0_min, self.p0_max, num_parameters) if random_p0 else np.ones(num_parameters)
+        popt = None
+        try:
+            popt, pcov = curve_fit(f, self.points[:, :-1].T, self.points[:, -1].T, p0=p0)
+            popt_dict = { str(coef): val for (coef, val) in zip(coefficients, popt) }
+            results.append((popt, pcov, popt_dict))
+            done_event.set()
+            return True
+        except Exception as e:
+            print(f"Optimization failed: {e}")
+            pass
         
-
-    def optimize(self, exp: sympy.core.add.Add, return_coeff: bool = False, quiet: bool = False) -> Tuple[sympy.core.add.Add, sympy.core.add.Add, Dict]:
+        return False
+    
+    def optimize(self, exp: sympy.core.add.Add, return_coeff: bool = False, quiet: bool = False) -> sympy.core.add.Add:
         """
         Optimizes a function to a set of points.
 
@@ -217,7 +193,6 @@ class Optimizer(object):
         -------
         exp : sympy.core.add.Add -> The optimized function.
         coeff_exp : sympy.core.add.Add -> The optimized function in coefficient form. (Only if return_coeff is True)
-        optimized_parameters: Dict -> the optimized parameters dictionary.
         """
         f, exp = self.get_optimizable_sympy_exp(exp, quiet=quiet)
         symbols = exp.free_symbols
@@ -226,10 +201,6 @@ class Optimizer(object):
         coeff_exp = exp if return_coeff else None
         Xs = self.points[:, :-1].T
         ys = self.points[:, -1].T
-
-        # Extract discrete values for a and b
-        a_values = self.parameter_ranges['a']
-        b_values = self.parameter_ranges['b']
 
         # Direct warnings only to console logger as file logger breaks with threading
         warnings.filterwarnings("default")
@@ -240,12 +211,13 @@ class Optimizer(object):
         results = []
         if self.num_threads == 1:
             self.logger.info("Running optimization with 1 attempt.") if not quiet else None
-            self._run_curve_fit(f, a_values, b_values, coefficients, results=results, done_event=threading.Event(), quiet=quiet, random_p0=False)
+            self._run_curve_fit(f, len(coefficients), results=results, done_event=threading.Event(), coefficients=coefficients, quiet=quiet, random_p0=False)
+            popt, pcov, popt_dict = results[0]
         else:
             done_event = threading.Event()
             threads = []
             for i in range(self.num_threads):
-                threads.append(threading.Thread(target=lambda: self._run_curve_fit(f, a_values, b_values, coefficients, results=results, done_event=done_event, quiet=quiet, random_p0=i!=0)))
+                threads.append(threading.Thread(target=lambda: self._run_curve_fit(f, len(coefficients), results=results, done_event=done_event, coefficients=coefficients, quiet=quiet, random_p0=i!=0)))
                 threads[-1].start()
             
             done_event.wait(self.timeout)
@@ -263,23 +235,22 @@ class Optimizer(object):
             warnings.showwarning = lambda *args, **kwargs: self.logger.warning(str(args[0]))
             self.logger.info("Redirecting warnings back to normal (both file and console).")
 
-        # Get the best parameters
-        best_popt = None
-        best_pcov = None
-        best_popt_dict = None
-        best_error = np.inf
-        for popt, pcov, popt_dict in results:
-            # popt contains a and b values at the beginning
-            error = np.sum((f(Xs, *popt) - ys) ** 2)
-            if error < best_error:
-                best_error = error
-                best_popt = popt
-                best_pcov = pcov
-                best_popt_dict = popt_dict
+            # Get the best parameters
+            best_popt = None
+            best_pcov = None
+            best_popt_dict = None
+            best_error = np.inf
+            for popt, pcov, popt_dict in results:
+                error = np.sum((f(Xs, *popt) - ys) ** 2)
+                if error < best_error:
+                    best_error = error
+                    best_popt = popt
+                    best_pcov = pcov
+                    best_popt_dict = popt_dict
 
-        popt = best_popt
-        pcov = best_pcov
-        popt_dict = best_popt_dict
+            popt = best_popt
+            pcov = best_pcov
+            popt_dict = best_popt_dict
 
         if pcov is None or np.isinf(pcov).any() or np.isnan(pcov).any():
             raise ValueError("Optimization failed: covariance matrix is invalid")
