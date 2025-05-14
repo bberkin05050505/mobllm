@@ -1,19 +1,25 @@
-I want you to act as a mathematical function generator.
-Given a set of points below, you are to come up with 5 potential functions that would fit the points. Don't worry too much about accuracy: your task is to generate a set of functions that are as diverse as possible, so that they can serve as starting points for further optimization.
+I want you to act as a mathematical function generator. Given a set of points below, you are to come up with 5 potential functions that would fit the points. Don't worry too much about accuracy: your task is to generate a set of functions that are as diverse as possible, so that they can serve as starting points for further optimization. 
+
+It is known that these points have been generated from a physical process f(x). There is also a small i.i.d. Gaussian noise in each measurement of f(x). It is known that f(x) has two physical parameters, a and b, to be determined from the experiment. Thus, it is very important that you only create functions with two coefficents a and b, and the rest of the coefficients should be denoted with c! 
 
 To generate the functions, you will start from a set of basic operators and expressions, and combine them into something more complex. 
 Your options are:
 - {num_variables} independent variable symbols: {variables_list}.
-- A coefficient symbol: c (there is no need to write a number - write this generic coefficient instead).
+- Two coefficient symbols: a and b
+- Symbol for all other coefficients: c
 - Basic operators: +, -, *, /, ^, sqrt, exp, log, abs
 - Trigonometric expressions: sin, cos, tan, sinh, cosh, tanh
 - Standard constants: "pi" represents pi and "E" represents euler's constant.
 
-Make sure there are no numbers in the functions, use the coefficient token 'c' instead.
+Make sure there are no numbers in the functions. Only use the coefficient tokens 'a' and 'b' for the physical parameters, and 'c' for the rest of the coefficients.
+
 You are required to use at least one of each variables from the available list ({variables_list}).
+
 Analyze the points carefully: if there are any negative points in the input, sqrt and log can not be used unless the input can never be negative. Be careful about dividing by zero!
-The functions should all begin with the indicators "f1 = ", "f2 = "... Only write the new function and no additional output.
-Your task is to combine a maximum of 7 of these basic blocks to create a complex expression. Don't be afraid to be creative and experiment! The functions should be as complex as possible, combining many different operations. Variety is key!
+
+The functions should all begin with the indicators "f1(x) = ", "f2(x) = "... Only write the new function and no additional output.
+
+Your task is to combine a maximum of 7 of these basic blocks to create expressions that are not too complex. Different functions should include different basic blocks.
 
 Points: {points}
 

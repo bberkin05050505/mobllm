@@ -54,8 +54,9 @@ class Workspace(object):
         experiment_folder_name = os.path.join(cfg.experiment.function.group, cfg.experiment.function.name) if hasattr(cfg.experiment.function, "group") else cfg.experiment.function.name
         self.output_path = os.path.join(self.root_dir, self.output_dir, experiment_folder_name, model_folder_name, self.exp_type, datetime.datetime.now().strftime("%Y%m%d-%H%M%S") + "/")
         while os.path.exists(self.output_path):
-            self.output_path = os.path.join(self.root_dir, self.output_dir, experiment_folder_name, model_folder_name, datetime.datetime.now().strftime("%Y%m%d-%H%M%S") + "-" + str(np.random.randint(0, 1000)) + "/")
+            self.output_path = os.path.join(self.root_dir, self.output_dir, experiment_folder_name, model_folder_name, self.exp_type, datetime.datetime.now().strftime("%Y%m%d-%H%M%S") + "-" + str(np.random.randint(0, 1000)) + "/")
         os.makedirs(self.output_path)
+        os.makedirs(self.output_path + "posteriors/")
 
         # Logger setup
         cfg.logger.run_id = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
@@ -155,7 +156,15 @@ class Workspace(object):
     
         self.checkpoints = cfg.checkpoints
 
+        self.parameter_names = cfg.experiment.function.parameters
         self.true_function_name = cfg.experiment.function.test_function
+
+        # Replace parameters in the true_function_name with their values from true_parameters
+        if hasattr(cfg.experiment.function, "parameters") and hasattr(cfg.experiment.function, "true_parameter_values"):
+            for param, value in zip(self.parameter_names, cfg.experiment.function.true_parameter_values.values()):
+                self.true_function_name = self.true_function_name.replace(param, str(value))
+
+        # Convert the true_function_name string into a callable function
         self.true_function = utils.string_to_function(self.true_function_name, self.num_variables)
 
         # Points setup
@@ -223,7 +232,7 @@ class Workspace(object):
         # Base SR prompt
         with open(os.path.join(self.prompts_path, cfg.prompt_folder, cfg.sr_prompt_name), "r") as f:
             self.base_sr_prompt = f.read()
-            self.base_sr_prompt = self.base_sr_prompt.format(points="{points}", num_best_funcs_c=self.num_best_funcs_c, 
+            self.base_sr_prompt = self.base_sr_prompt.format(points="{points}", domain=self.train_domain_d, num_best_funcs_c=self.num_best_funcs_c, 
                                         functions="{functions}", num_to_sample_b=self.num_to_sample_b, num_variables=self.num_variables, 
                                         variables_list=[f"x{i+1}" for i in range(self.num_variables)])
 
@@ -593,20 +602,21 @@ class Workspace(object):
             # Start the main loop
             budget_remaining = self.exp_budget_n
             llm_sampled_data = ""
+            llm_sampled_data_with_IG = ""
             og_train_points = utils.array_to_string(self.train_points, self.num_digits)
 
             while budget_remaining > 0:
                 iteration = self.exp_budget_n - budget_remaining
 
                 # perform experimental design
-                proposed_design = self.ED.propose_design(llm_sampled_data, budget_remaining, iteration)
+                proposed_design = self.ED.propose_design(llm_sampled_data_with_IG, llm_sampled_data, budget_remaining, iteration)
                 
                 # sample data accordingly and update train points and round to self.num_digits digits
                 # new_point is an np array of a float, so we first access it and then round
                 new_point_y = utils.eval_function(self.true_function, np.array([proposed_design]), self.num_variables)
                 new_point_y = round(new_point_y.item(), self.num_digits)
 
-                if llm_sampled_data == "":
+                if iteration == 0:
                     llm_sampled_data = str((proposed_design, new_point_y))
                 else:
                     llm_sampled_data = llm_sampled_data + ", " + str((proposed_design, new_point_y))
@@ -623,7 +633,35 @@ class Workspace(object):
                 # Perform symbolic regression, optimization, compute cost and update results
                 best_expr, best_func, best_score = self.SR.propose_exp_and_get_score(self.all_train_points, iteration, frames)
 
+                # Update the prior and the prior entropy for the next iteration. If an error is raised during posterior computation, the function must have resulted in 0 likelihood. Then, keep the old prior as is and the information gain as 0.
+                observed_data = utils.string_to_array(self.all_train_points)   
+                information_gain = 0
+
+                # Replace all the coefficients in the expression with the optimized parameters, 
+                # except those in self.parameter_names
+                optimized_param_dict = self.current_functions.optimized_params[best_expr]
+                optimized_param_dict = { param: val for param, val in optimized_param_dict.items() if param not in self.parameter_names }
+                replaced_exp = utils.replace_coefficients(str(best_expr), optimized_param_dict)
+
+                try:
+                    likelihood = self.ED.compute_likelihood(observed_data, replaced_exp)
+                    posterior, information_gain = self.ED.update_posterior(likelihood)
+                    self.ED.prior = posterior
+                    self.ED.prior_entropy = self.ED.prior_entropy - information_gain 
+                except:
+                    pass
+
+                new_data_with_IG = str((proposed_design, new_point_y, information_gain))    
+                if iteration == 0:
+                    llm_sampled_data_with_IG = new_data_with_IG
+                else:
+                    llm_sampled_data_with_IG += ", " + new_data_with_IG
+                    
                 budget_remaining -= 1
+
+                # Save the posterior distribution plots
+                fig, ax = self.ED.plot_posteriors(iteration)
+                fig.savefig(self.output_path + f"posteriors/iteration_{iteration + 1}.png")
 
                 # Check if the true function has been found
                 if self.true_function is not None:
@@ -705,7 +743,7 @@ def main(cfg: DictConfig) -> None:
     num_exps = cfg.initialization.num_exps_l
     num_finished = 0
     for _ in range(num_exps):
-        try:
+        try: 
             print(f"Running experiment {_ + 1} of {num_exps}...")
             workspace = Workspace(cfg)
             success += workspace.run()
@@ -713,6 +751,7 @@ def main(cfg: DictConfig) -> None:
         except Exception as e:
             print(f"Experiment {_ + 1} failed. {e}")
             continue
+
     print(f"Success ratio: {success}/{num_exps}")
     print(f"Number of experiments that completed without errors: {num_finished}/{num_exps}")
     

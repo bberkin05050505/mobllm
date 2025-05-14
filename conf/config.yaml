@@ -1,5 +1,5 @@
 defaults:
-  - model: llama3-8b-8192
+  - model: llama3.1-8.0B-Q4_K_M
   - experiment: standard
   - logger: default_logger
   - _self_
@@ -21,8 +21,10 @@ allowed_exp_types:
   - "base_ed_and_sr"
   - "base_ed_and_sr_different_prompts"
   - "cost_change_in_prompts"
-  - "bayesian_ed"
+  - "bayesian_ed_best_func_posterior_different_prompts"
+  - "bayesian_ed_max_ig_posterior_different_prompts"
   - "prompt_optimization"
+  - "ig_lowest_cost"
 
 # Torch
 device: 'cuda' # auto works for both CPU and GPU and can be used in a multi-GPU setup
@@ -47,16 +49,16 @@ plotter:
 initialization:
   num_init_pts_k: 7
   num_test_pts_m: 100
-  num_exps_l: 10
+  num_exps_l: 8
   epsilon_c: 0.95
   epsilon_r: 0.99
-  test_domain_d: [0, 8]
+  test_domain_d: [0, 3]
   num_data_digits: 3
-  exp_type: base_ed_and_sr
+  exp_type: ig_lowest_cost
 
 # ED parameters
 ED:
-  train_domain_d: [0, 4]
+  train_domain_d: [0, 1.5]
   exp_budget_n: 5
   retries: 10
 

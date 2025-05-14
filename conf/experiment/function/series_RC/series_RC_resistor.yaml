@@ -1,0 +1,30 @@
+# This experiment is for measuring the RMS voltage output across the resistor
+# Parameter a is the voltage amplitude V_0 divided by sqrt(2) and parameter b is the time constant tau = RC
+# The true function is of the form a * x * b / sqrt(1 + b^2 * x^2)
+
+name: "series_RC_resistor"
+group: "series_RC"
+
+# Train points
+train_points:
+  generate_points: true
+  data_folder: "data/series_RC/series_RC1"
+  # This part is only used if generate_points is true
+  xs_noise_std: 0
+  ys_noise_std: 0.05
+  random: true
+  add_extremes: true # Manually adds points at the extremes of the interval if random is true
+
+# Test function
+test_function: "(a * x * b) / sqrt(1 + b^2 * x^2)"
+num_variables: 1
+parameters: ["a", "b"]
+true_parameter_values:
+  a: 10  # True value for parameter a
+  b: 1.0  # True value for parameter b
+parameter_ranges:
+  a: [5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]  # Example values for parameter a
+  b: [0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 1.1, 1.2, 1.3, 1.4, 1.5]  # Example values for parameter b
+  num_points_a: 11 # Only used if "a" has two elements denoting the start and the end of the range
+  num_points_b: 11 # Only used if "b" has two elements denoting the start and the end of the range
+noise_std: 1  # Standard deviation for Gaussian likelihood
