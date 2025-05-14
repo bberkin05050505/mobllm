@@ -7,7 +7,7 @@ name: Qwen/Qwen2.5-7B-Instruct-1M
 tokenizer_pad: \\[PAD\\]
 tokenizer_padding_side: left
 visual: false
-cache_dir: "C:\\Users\\Berkin\\Desktop\\PostUG\\Spring 2025\\MEng\\hf_llms"
+cache_dir: ""
 
 # Seed functions prompt
 seed_function_prompt: seed_functions/generate_seed.txt

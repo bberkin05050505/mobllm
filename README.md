@@ -1,5 +1,7 @@
-# LLMs for BED and SR
+# LLMs for ED and SR
 
-Framework for incorporating LLMs into intelligent model building by leveraging their in-context learning capabilities and domain-specific knowledge to perform efficient BED and SR.
+## Thesis code release
 
-The starting code is from the repo: git@github.com:merlerm/In-Context-Symbolic-Regression.git. They have nice, automated, modular workflows that can be built on for structuring our pipeline. 
+Framework for incorporating LLMs into compact model building by leveraging their in-context learning capabilities and domain-specific knowledge to perform experimental design and symbolic regresssion concurrently.
+
+The codebase on which this code builds is from thse repo: git@github.com:merlerm/In-Context-Symbolic-Regression.git. 

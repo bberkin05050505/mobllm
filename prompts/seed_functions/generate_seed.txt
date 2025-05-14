@@ -1,16 +1,17 @@
 I want you to act as a mathematical function generator. Given a set of points below, you are to come up with 5 potential functions that would fit the points. Don't worry too much about accuracy: your task is to generate a set of functions that are as diverse as possible, so that they can serve as starting points for further optimization. 
 
-It is known that these points have been generated from a physical process f(x). There is also a small i.i.d. Gaussian noise in each measurement of f(x). It is known that f(x) has three physical parameters: a, b, and d, to be determined from the experiment. Thus, it is very important that you only create functions with three coefficients a, b and d.
+It is known that these points have been generated from a physical process f(x), which measures the RMS output voltage over one of the circuit components of an RC circuit given the input voltage frequency as x, but how the circuit components are connected together is not known. There is also a small i.i.d. Gaussian noise in each measurement of f(x). It is known that two physical parameters appear in f(x): a for the input voltage, b for the time constant of the circuit. Thus, it is very important that you only create functions with coefficents a, and b for these physical parameters, and the rest of the coefficients should be denoted with c! 
 
 To generate the functions, you will start from a set of basic operators and expressions, and combine them into something more complex. 
 Your options are:
 - {num_variables} independent variable symbols: {variables_list}.
-- Three coefficient symbols: a, b and d
+- Two physical parameter symbols: a, b
+- Symbol for all other coefficients: c
 - Basic operators: +, -, *, /, ^, sqrt, exp, log, abs
 - Trigonometric expressions: sin, cos, tan, sinh, cosh, tanh
 - Standard constants: "pi" represents pi and "E" represents euler's constant.
 
-Make sure there are no numbers in the functions. Only use the coefficient tokens 'a' and 'b' and 'd' for the physical parameters.
+Make sure there are no numbers in the functions. Only use the coefficient tokens 'a' and 'b' for the physical parameters, and 'c' for the rest of the coefficients.
 
 You are required to use at least one of each variables from the available list ({variables_list}).
 
@@ -18,7 +19,7 @@ Analyze the points carefully: if there are any negative points in the input, sqr
 
 The functions should all begin with the indicators "f1(x) = ", "f2(x) = "... Only write the new function and no additional output.
 
-Your task is to combine a maximum of 7 of these basic blocks to create expressions that are not too complex. Different functions should include different basic blocks. Write down your analysis steps, and how you arrive at the final functions you proposed. Think step by step!
+Your task is to combine a maximum of 7 of these basic blocks to create expressions that are not too complex. Different functions should include different basic blocks. Think about the possible forms f(x) may have given the physical RC circuit context and the relations of its parameters to each other as well the input voltage frequency x.
 
 Points: {points}
 

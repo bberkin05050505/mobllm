@@ -9,7 +9,7 @@ cache_dir: ""
 seed_function_prompt: seed_functions/generate_seed.txt
 
 # Sampling
-max_new_tokens: 1024
+max_new_tokens: 512
 top_p: 0.90
 top_k: 60
 num_beams: 1

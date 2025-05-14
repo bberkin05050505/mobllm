@@ -1,11 +1,11 @@
 defaults:
-  - model: llama3-70b-8192
+  - model: llama3-8b-8192
   - experiment: standard
   - logger: default_logger
   - _self_
 
 # Experiment
-output_dir: runs # Output directory where all runs will be saved, with the following structure: output_dir/benchmark_name/experiment_name/model_name/run_id
+output_dir: finals_v1 # Output directory where all runs will be saved, with the following structure: output_dir/benchmark_name/experiment_name/model_name/run_id
 max_retries: 5 # Maximum number of retries if prompt failed to generate a valid function as the output
 force_valid: false # Force the output to be valid (i.e. a valid function). If false, when the model fails to generate a valid function, after max_retries, the output will be the best generated function so far
 force_unique: false # Force the output to be unique (i.e. different from all the functions in the prompt)
@@ -23,9 +23,8 @@ allowed_exp_types:
   - "cost_change_in_prompts"
   - "bayesian_ed"
   - "prompt_optimization"
-  - "base_ed_and_sr_different_prompts_chain_of_thought"
-  - "base_ed_and_sr_different_prompts_chain_of_thought_3_params"
-  
+  - "base_ed_physical_context"
+
 # Torch
 device: 'cuda' # auto works for both CPU and GPU and can be used in a multi-GPU setup
 use_bfloat16: false
@@ -33,7 +32,7 @@ seed: -1 # If -1, the seed will be randomly generated
 random_seed_each_run: true # If true, each run will have a different seed, otherwise the same seed will be used for all runs
 
 # Project root
-root: "C:\\Users\\Berkin\\Desktop\\PostUG\\Spring 2025\\MEng\\mobllm" # Path to the root of the project, where the 'conf', 'data' directories are located and where main.py is executed
+root: "" # Path to the root of the project, where the 'conf', 'data' directories are located and where main.py is executed
 
 # Plotter
 plotter:
@@ -47,20 +46,20 @@ plotter:
 
 # initialization parameters
 initialization:
-  num_init_pts_k: 5
+  num_init_pts_k: 7
   num_test_pts_m: 100
-  num_exps_l: 1
+  num_exps_l: 10
   epsilon_c: 0.95
   epsilon_r: 0.99
   test_domain_d: [0, 3]
   num_data_digits: 3
-  exp_type: base_ed_and_sr_different_prompts_chain_of_thought_3_params
+  exp_type: base_ed_physical_context
 
 # ED parameters
 ED:
-  train_domain_d: [0.1, 1.5]
+  train_domain_d: [0, 1.5]
   exp_budget_n: 5
-  retries: 5
+  retries: 10
 
 # SR parameters
 SR:

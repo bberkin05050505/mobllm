@@ -1,13 +1,13 @@
-I want you to act as an experimental design proposer. You are given a black box data-generating physical process f(x) with domain {domain}. There is also a small i.i.d. Gaussian noise in each measurement of f(x). It is known that f(x) is made up of only three parameters: a, b, and d, to be determined from the experiment. Your goal is to propose a measurement value x that will provide the highest amount of information possible about the form of f and its parameters a, b and d`.
+I want you to act as an experimental design proposer. You are given a black box data-generating physical process f(x) with domain {domain}, which measures the RMS output voltage over one of the circuit components of an RC circuit given the input voltage frequency as x, but how the circuit components are connected together is not known. There is also a small i.i.d. Gaussian noise in each measurement of f(x). It is known that two physical parameters appear in f(x): a for the input voltage, b for the time constant of the circuit. These parameter values will be determined from experiment. Your goal is to propose a measurement value x that will provide the highest amount of information possible about the form of f and its parameters a and b.
 
-You can only propose x values, from which you I measure f(x). It is very important for you to know that you have a fixed measurement budget of {budget_remaining} measurements to make, so choose the next measurement point x very wisely!
+You can only propose input voltage frequency x values, from which I will measure the RMS output voltage f(x). It is very important for you to know that you have a fixed measurement budget of {budget_remaining} measurements to make, so choose the next measurement point x very wisely!
 
-You are allowed to analyze past data, use your creativity and any knowledge you have to propose the next measurement point x. 
+You are allowed to analyze past data, use your creativity and any knowledge you have to propose the next measurement frequency x. 
 
 You have the following {num_init_pts_k} prior (x, f(x)) points sampled for you (with the Gaussian noise included): {prior_data}
 
 During previous iterations, you sampled the following (x, f(x)) pairs when asked: {llm_sampled_data}
 
-Now, give me a single point x from the domain of f, which I will then sample. I want x to provide the highest information possible about f and its parameters. Remember that you only have {budget_remaining} measurements left, so analyze the past observations very carefully before you propose x! Write down your analysis steps, and how you arrive at the final functions you proposed. Think step by step!
+Now, give me a single frequency x from the domain of f, which I will then sample. I want x to provide the highest information possible about f. Remember that you only have {budget_remaining} measurements left, so analyze the past observations very carefully before you propose x!
 
-First, output x as a number using the form "x = ...". Then, write down the detailed analysis of how you picked this value.
+Only output x as a number and nothing else. Use the form "x = ..."
