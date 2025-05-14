@@ -6,8 +6,8 @@ You are allowed to analyze past data, use your creativity and any knowledge you 
 
 You have the following {num_init_pts_k} prior (x, f(x)) points sampled for you: {prior_data}
 
-The domain of f is {domain}. Your task is to give me a single point x from this domain, which I will then sample. I want x to provide the highest 
+The domain of f is {domain}. Your task is to give me a single point x_0 from this domain, which I will then sample. I want x_0 to provide the highest 
 information possible about f. Remember that you only have {budget_remaining} measurements left, so analyze the past observations very carefully before
-you propose x!
+you propose x_0!
 
-Only output x and nothing else. Use the form "x = ..."
+Only output x_0 and nothing else. Use the form "x_0 = ...". Again, I repeat - ONLY output x_0!

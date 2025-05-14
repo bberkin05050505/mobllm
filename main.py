@@ -593,26 +593,23 @@ class Workspace(object):
             # Start the main loop
             budget_remaining = self.exp_budget_n
             llm_sampled_data = ""
-            llm_sampled_data_with_costs = ""
-            last_lowest_cost = self.current_functions.get_best_score()
             og_train_points = utils.array_to_string(self.train_points, self.num_digits)
 
             while budget_remaining > 0:
                 iteration = self.exp_budget_n - budget_remaining
 
                 # perform experimental design
-                proposed_design = self.ED.propose_design(llm_sampled_data_with_costs, llm_sampled_data, budget_remaining, iteration)
+                proposed_design = self.ED.propose_design(llm_sampled_data, budget_remaining, iteration)
                 
                 # sample data accordingly and update train points and round to self.num_digits digits
                 # new_point is an np array of a float, so we first access it and then round
                 new_point_y = utils.eval_function(self.true_function, np.array([proposed_design]), self.num_variables)
                 new_point_y = round(new_point_y.item(), self.num_digits)
 
-                new_data = str((proposed_design, new_point_y))
-                if iteration == 0:
-                    llm_sampled_data = new_data
+                if llm_sampled_data == "":
+                    llm_sampled_data = str((proposed_design, new_point_y))
                 else:
-                    llm_sampled_data += ", " + new_data
+                    llm_sampled_data = llm_sampled_data + ", " + str((proposed_design, new_point_y))
                 self.all_train_points = og_train_points + ", " + llm_sampled_data
 
                 # Update the training points to include the newly sampled points for everything they are used in
@@ -625,16 +622,6 @@ class Workspace(object):
 
                 # Perform symbolic regression, optimization, compute cost and update results
                 best_expr, best_func, best_score = self.SR.propose_exp_and_get_score(self.all_train_points, iteration, frames)
-
-                # Compute the lowest cost change from last iteration to this iteration
-                lowest_cost_change = best_score - last_lowest_cost
-                last_lowest_cost = best_score
-
-                new_data_with_cost = str((proposed_design, new_point_y, lowest_cost_change))
-                if iteration == 0:
-                    llm_sampled_data_with_costs = new_data_with_cost
-                else:
-                    llm_sampled_data_with_costs += ", " + new_data_with_cost
 
                 budget_remaining -= 1
 

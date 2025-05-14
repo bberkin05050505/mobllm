@@ -105,8 +105,7 @@ class CurrentFunctions(object):
 
     def add_function(self, expr: Any, function: Any, popt: Any) -> None:
         """
-        Adds a function to the current functions. If its score is worse than the current worse score,
-        does not add the function.
+        Adds a function to the current functions.
 
         Parameters
         ----------

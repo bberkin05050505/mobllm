@@ -1,5 +1,5 @@
 defaults:
-  - function: nguyen/nguyen3
+  - function: nguyen/nguyen4
   - scorer: complexity_scorer
   - seed_functions: generate
   - _self_

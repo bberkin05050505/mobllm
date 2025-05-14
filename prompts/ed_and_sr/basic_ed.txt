@@ -6,16 +6,10 @@ You are allowed to analyze past data, use your creativity and any knowledge you 
 
 You have the following {num_init_pts_k} prior (x, f(x)) points sampled for you: {prior_data}
 
-I will also tell you what (x, f(x)) pairs you sampled in the previous iterations below along with the associated cost changes. The third number 
-in each tuple is the associated cost change from the previous iteration to the next one. Samples with a smaller cost change helped you 
-generate better symbolic expressions in the next iteration. But also keep in mind that samples with higher cost changes have challenged your 
-current beliefs on the symbolic expression and therefore have been useful directions of exploration. Analyze all the data points as well as 
-the associated cost changes very carefully when proposing the next measurement!
+During previous iterations, you sampled the following (x, f(x)) pairs when asked: {llm_sampled_data}
 
-{llm_sampled_data}
+The domain of f is {domain}. Your task is to give me a single point x_0 from this domain, which I will then sample. I want x_0 to provide the highest 
+information possible about f. Remember that you only have {budget_remaining} measurements left, so analyze the past observations very carefully before
+you propose x_0!
 
-The domain of f is {domain}. Your task is to give me a single point x from this domain, which I will then sample. I want x to provide the highest 
-information possible about f. x should also be absolutely different from the previous measurements above! Remember that you only have {budget_remaining} measurements left, so analyze the past observations very carefully before
-you propose x!
-
-Only output x and nothing else. Use the form "x = ..."
+Only output x_0 and nothing else. Use the form "x_0 = ...". Again, I repeat - ONLY output x_0!

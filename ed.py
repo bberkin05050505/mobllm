@@ -34,11 +34,10 @@ class ED(object):
         self.num_digits = cfg.initialization.num_data_digits
 
     
-    def propose_design(self, info: str, only_new_pts: str, budget_remaining: int, iteration: int) -> float:
+    def propose_design(self, info: str, budget_remaining: int, iteration: int) -> float:
         """
         Prompts the LLM for experimental design, info to be included from past iterations. 
         Points sampled during initialization are passed into the prompt separately.
-        only_new_pts contains only the llm-sampled training points without the cost change.
 
         Parameters
         ----------
@@ -54,7 +53,7 @@ class ED(object):
         if info == "":
             all_train_points = utils.string_to_array(self.og_train_points)
         else:
-            all_train_points = utils.string_to_array(self.og_train_points + ", " + only_new_pts)
+            all_train_points = utils.string_to_array(self.og_train_points + ", " + info)
         
         while retries_left > 0:
             if iteration == 0:
@@ -78,11 +77,11 @@ class ED(object):
                 if line == "":
                     continue
                 try:
-                    if "x" in line:
+                    if "x_0" in line:
                         words = line.split()
                         len_line = len(words)
                         for i in range(2, len_line):
-                            if words[i-2] == "x" and words[i-1] == "=":
+                            if words[i-2] == "x_0" and words[i-1] == "=":
                                 exp_design = float(words[i])
                                 valid = True
                                 break
@@ -92,7 +91,7 @@ class ED(object):
                         self.logger.info(f"Proposed experimental design for iteration {iteration + 1} is: {exp_design}")
                         break
                     else:
-                        self.logger.warning("Found a line with x in it but it is not properly formatted.")
+                        self.logger.warning("Found a line with x_0 in it but it is not properly formatted.")
                 except Exception as e:
                     self.logger.warning(f"Could not parse line {line}.")
                     self.logger.warning(str(e))
@@ -117,6 +116,5 @@ class ED(object):
                 else:
                     return exp_design
             
-        self.logger.warning("Could not find a valid experimental design in the output and no retries left. Raising exception.")
-        raise Exception("Could not find a valid experimental design in the output and no retries left.")
-
+        self.logger.warning("Could not find a valid experimental design in the output and no retries left. Exit.")
+        sys.exit(1)
