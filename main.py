@@ -487,7 +487,7 @@ class Workspace(object):
         img_path = os.path.join(self.output_path, "points.png") if self.input_img else None
 
         prompt = prompt.format(points=utils.array_to_string(self.train_points, self.num_digits), num_variables=self.num_variables, 
-                               variables_list=[f"x{i+1}" for i in range(self.num_variables)])
+                               variables_list=[f"x{i+1}" for i in range(self.num_variables)], num_init_pts_k=self.num_init_pts_k)
         self.logger.info("Prompt for seed functions generation:")
         self.logger.info(prompt)
         
@@ -662,6 +662,7 @@ class Workspace(object):
         self.logger.info(f"Dense training score: {dense_training_score}.")
         self.logger.info(f"Best function: {best_function}. Score: {self.current_functions.scores[best_expr]} ({self.current_functions.norm_scores[best_expr]}).")
         
+        self.results["final_train_points"] = self.all_train_points
         self.results["best_function"] = str(best_function)
         self.results["best_expr"] = str(best_expr)
         self.results["best_popt"] = str(best_popt)
@@ -678,7 +679,7 @@ class Workspace(object):
         self.results["r2_dense_train"] = r2_dense_train
         self.results["r2_test"] = r2_test
         self.results["r2_all"] = r2_all
-        self.logger.info(f"R2 train: {np.round(r2_train, 6)}. R2 test: {np.round(r2_test, 6)}. R2 all: {np.round(r2_all, 6)}.")
+        self.logger.info(f"R2 train: {np.round(r2_train, 6)}. R2 dense train: {np.round(r2_dense_train, 6)} R2 test: {np.round(r2_test, 6)}. R2 all: {np.round(r2_all, 6)}.")
         
         final_complexity = utils.count_nodes(best_function)
         self.results["final_complexity"] = final_complexity

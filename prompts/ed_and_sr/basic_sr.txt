@@ -3,12 +3,15 @@ I want you to act as a mathematical function generator. You are given a set of p
 
 Below are the top performing {num_best_funcs_c} previous functions and the error they make on the points above. The errors are arranged in order of their fit values, with the highest values coming first, and lower is better.
 {functions}
-The error metric penalizes both the deviations from the data, and also the complexity of the function.
 
-Your task is to give me a list of {num_to_sample_b} new functions that are different from all the ones reported below, and have a lower error value than all of the ones below. Only output the new functions and nothing else.
+The error metric penalizes both the deviations from the data, and also the complexity of the function. 
+
+Your task is to give me a list of {num_to_sample_b} new functions that are different from all the ones reported above, and have a lower error value than those. 
+
 Remember that the functions you generate should always have at most {num_variables} variables {variables_list}. 
 
-The functions should have parametric form, using 'c' in place of any constant or coefficient. The coefficients will be optimized to fit the data. Make absolutely sure that the functions you generate are completely different from the ones already given to you.
-Remember that you can combine the simple building blocks (operations, constants, variables) in any way you want to generate more complex functions. Don't be afraid to experiment!
+The functions should have parametric form, using 'c' in place of any constant or coefficient. The coefficients will be optimized to fit the data.
 
-The functions should all begin with the indicators "f1(x) = ", "f2(x) = "... 
+You are given that f(x) is constrained to include the basic operators +, -, *, /, ^, sqrt, exp, log, abs and nothing else. So, when creating new functions, only use these operators. You can use parts of the above functions to take inspiration when generating new ones.
+
+The functions should all begin with the indicators "f1(x) = ", "f2(x) = "... . Only output the functions.
